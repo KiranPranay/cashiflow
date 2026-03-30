@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:cashi_flow/presentation/core/theme.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cashi_flow/domain/providers/transaction_providers.dart';
 import 'package:cashi_flow/domain/models/transaction_model.dart';
 import 'dart:math';
@@ -14,146 +14,328 @@ class AnalyticsScreen extends ConsumerWidget {
     final transactionsAsyncValue = ref.watch(transactionsStreamProvider);
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Analytics', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('My Spending', style: TextStyle(fontWeight: FontWeight.w800)),
         elevation: 0,
         backgroundColor: Colors.transparent,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.more_horiz),
+            onPressed: () {},
+          ),
+        ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Daily Burn Rate',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.electricMint,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Your spending over the last 7 days',
-                style: TextStyle(color: Colors.grey.shade400),
-              ),
-              const SizedBox(height: 48),
-              Expanded(
-                child: transactionsAsyncValue.when(
-                  data: (transactions) => _buildChart(transactions),
-                  loading: () => const Center(child: CircularProgressIndicator()),
-                  error: (error, __) => Center(child: Text('Error: $error')),
-                ),
-              ),
-            ],
-          ),
+        bottom: false,
+        child: transactionsAsyncValue.when(
+          data: (transactions) => _buildBody(context, transactions),
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, __) => Center(child: Text('Error: $error')),
         ),
       ),
     );
   }
 
-  Widget _buildChart(List<TransactionModel> transactions) {
-    // Process transactions into daily sums for the last 7 days
+  Widget _buildBody(BuildContext context, List<TransactionModel> transactions) {
+    // 1. Compute 4 months of data (past 3 months + current month)
     final now = DateTime.now();
-    final List<double> dailyTotals = List.filled(7, 0.0);
+    final List<double> monthlyTotals = [0, 0, 0, 0];
     
+    // Sort transactions into buckets based on how many months ago they occurred
     for (var tx in transactions) {
-      if (tx.type.toLowerCase() == 'sent') {
-        final diff = DateTime(now.year, now.month, now.day)
-            .difference(DateTime(tx.timestamp.year, tx.timestamp.month, tx.timestamp.day))
-            .inDays;
-        if (diff >= 0 && diff < 7) {
-          // Index 0 means 'today'
-          dailyTotals[diff] += tx.amount;
+      if (tx.type == 'Expense' && tx.status != 'needs_review') {
+        int monthDiff = (now.year - tx.timestamp.year) * 12 + now.month - tx.timestamp.month;
+        if (monthDiff >= 0 && monthDiff < 4) {
+          monthlyTotals[3 - monthDiff] += tx.amount; // 3 is current, 0 is 3 months ago
         }
       }
     }
-    
-    // Reverse so index 0 is 7 days ago and index 6 is today
-    final chartData = dailyTotals.reversed.toList();
-    
-    final maxY = chartData.isEmpty ? 1000.0 : max<double>(1000.0, chartData.reduce(max) * 1.2);
 
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        maxY: maxY,
-        barTouchData: BarTouchData(
-          enabled: true,
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (group) => AppTheme.surfaceColor,
-            tooltipPadding: const EdgeInsets.all(8),
-            getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              return BarTooltipItem(
-                '₹${rod.toY.toStringAsFixed(0)}',
-                const TextStyle(color: AppTheme.electricMint, fontWeight: FontWeight.bold),
-              );
-            },
-          ),
-        ),
-        titlesData: FlTitlesData(
-          show: true,
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, meta) {
-                // value is 0..6
-                final daysAgo = 6 - value.toInt();
-                final date = now.subtract(Duration(days: daysAgo));
-                final dayLabel = _getShortWeekday(date.weekday);
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Text(
-                    daysAgo == 0 ? 'Today' : dayLabel,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                );
-              },
-            ),
-          ),
-          leftTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false), // Hide vertical axis
-          ),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        ),
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: maxY / 4 == 0 ? 1 : maxY / 4,
-          getDrawingHorizontalLine: (value) => FlLine(
-            color: Colors.grey.withOpacity(0.2),
-            strokeWidth: 1,
-            dashArray: [5, 5],
-          ),
-        ),
-        borderData: FlBorderData(show: false),
-        barGroups: List.generate(
-          7,
-          (i) => BarChartGroupData(
-            x: i,
-            barRods: [
-              BarChartRodData(
-                toY: chartData[i],
-                color: AppTheme.electricMint,
-                width: 20,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                backDrawRodData: BackgroundBarChartRodData(
+    final maxY = monthlyTotals.isEmpty ? 1000.0 : max<double>(1000.0, monthlyTotals.reduce(max) * 1.5);
+    final monthLabels = _getLast4MonthsLabels(now);
+
+    return Column(
+      children: [
+        // Top Chart Section
+        SizedBox(
+          height: 300,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 24.0, right: 32, left: 16),
+            child: LineChart(
+              LineChartData(
+                gridData: FlGridData(
                   show: true,
-                  toY: maxY,
-                  color: AppTheme.surfaceColor,
+                  drawVerticalLine: true,
+                  verticalInterval: 1, // Draw a line for every month
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
+                    strokeWidth: 1,
+                    dashArray: [5, 5],
+                  ),
+                  getDrawingVerticalLine: (value) {
+                    if (value == 2) {
+                      // Highlight the prominent month like the mockup (e.g. index 2)
+                      return FlLine(
+                        color: Theme.of(context).colorScheme.tertiaryContainer.withValues(alpha: 0.8),
+                        strokeWidth: 40,
+                      );
+                    }
+                    return const FlLine(color: Colors.transparent, strokeWidth: 0);
+                  },
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 30,
+                      interval: 1,
+                      getTitlesWidget: (value, meta) {
+                        if (value < 0 || value >= 4) return const SizedBox.shrink();
+                        final isHighlighted = value.toInt() == 2;
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 10.0),
+                          child: Text(
+                            monthLabels[value.toInt()],
+                            style: TextStyle(
+                              color: isHighlighted ? Theme.of(context).colorScheme.onSurface : Colors.grey,
+                              fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
+                              fontSize: 14,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: maxY / 3,
+                      reservedSize: 42,
+                      getTitlesWidget: (value, meta) {
+                        if (value == 0) return const Text('0', style: TextStyle(color: Colors.grey, fontSize: 12));
+                        return Text('${(value / 1000).toStringAsFixed(0)}k', style: const TextStyle(color: Colors.grey, fontSize: 12));
+                      },
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                minX: 0,
+                maxX: 3,
+                minY: 0,
+                maxY: maxY,
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: [
+                      FlSpot(0, monthlyTotals[0]),
+                      FlSpot(1, monthlyTotals[1]),
+                      FlSpot(2, monthlyTotals[2]),
+                      FlSpot(3, monthlyTotals[3]),
+                    ],
+                    isCurved: true,
+                    color: Theme.of(context).colorScheme.primary,
+                    barWidth: 3,
+                    isStrokeCapRound: true,
+                    dotData: FlDotData(
+                      show: true,
+                      checkToShowDot: (spot, barData) => spot.x == 2, // Only show dot on highlighted month
+                      getDotPainter: (spot, percent, barData, index) {
+                        return FlDotCirclePainter(
+                          radius: 4,
+                          color: Theme.of(context).colorScheme.primary,
+                          strokeWidth: 4,
+                          strokeColor: Colors.white,
+                        );
+                      },
+                    ),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                    ),
+                  ),
+                ],
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipColor: (_) => Theme.of(context).colorScheme.inverseSurface,
+                    tooltipPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((spot) {
+                        return LineTooltipItem(
+                          '₹${spot.y.toStringAsFixed(0)}',
+                          TextStyle(color: Theme.of(context).colorScheme.onInverseSurface, fontWeight: FontWeight.bold),
+                        );
+                      }).toList();
+                    },
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
+
+        const SizedBox(height: 16),
+
+        // Bottom Dashboard Overlapping List
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.inverseSurface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20)],
+            ),
+            child: Column(
+              children: [
+                // Inner Dark Budget Card (mimics mockup)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Budget for ${monthLabels.last}', 
+                        style: TextStyle(color: Theme.of(context).colorScheme.onInverseSurface.withValues(alpha: 0.8), fontSize: 16)),
+                      Text('₹${monthlyTotals.last.toStringAsFixed(0)}', 
+                        style: TextStyle(color: Theme.of(context).colorScheme.onInverseSurface, fontSize: 24, fontWeight: FontWeight.w800)),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: 0.7, // Demo progress logic
+                      backgroundColor: Theme.of(context).colorScheme.onInverseSurface.withValues(alpha: 0.2),
+                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFB74D)),
+                      minHeight: 6,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                
+                // Sliding White Container housing the list
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                    ),
+                    child: CustomScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      slivers: [
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(24, 32, 24, 16),
+                            child: Text('Your Activity', 
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
+                          ),
+                        ),
+                        _buildRecentTransactionsList(context, transactions),
+                        const SliverToBoxAdapter(child: SizedBox(height: 120)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecentTransactionsList(BuildContext context, List<TransactionModel> txs) {
+    final recent = txs.where((t) => t.status != 'needs_review').toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    if (recent.isEmpty) {
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Center(child: Text('No transactions yet.', style: TextStyle(color: Colors.grey))),
+        ),
+      );
+    }
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final tx = recent[index];
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                )
+              ]
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              leading: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  tx.type == 'Expense' ? Icons.shopping_bag_rounded : Icons.account_balance_rounded,
+                  color: Theme.of(context).colorScheme.onSecondaryContainer,
+                ),
+              ),
+              title: Text(tx.title.isNotEmpty ? tx.title : 'Payment', 
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              subtitle: Text(
+                '${tx.timestamp.day} ${_getMonthName(tx.timestamp.month)} ${tx.timestamp.year}',
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+              ),
+              trailing: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '₹${tx.amount.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                      color: tx.type == 'Expense' ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  Text(tx.type, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                ],
+              ),
+            ),
+          );
+        },
+        childCount: min(15, recent.length),
       ),
     );
   }
 
-  String _getShortWeekday(int weekday) {
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return days[weekday - 1];
+  List<String> _getLast4MonthsLabels(DateTime now) {
+    List<String> labels = [];
+    for (int i = 3; i >= 0; i--) {
+      int prevMonth = now.month - i;
+      if (prevMonth <= 0) prevMonth += 12;
+      labels.add(_getMonthNameShort(prevMonth));
+    }
+    return labels;
+  }
+
+  String _getMonthNameShort(int month) {
+    const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return names[month - 1];
+  }
+  
+  String _getMonthName(int month) {
+    const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return names[month - 1];
   }
 }
-

@@ -1,6 +1,6 @@
 import 'package:cashi_flow/presentation/analytics/analytics_screen.dart';
 import 'package:cashi_flow/presentation/dashboard/dashboard_screen.dart';
-import 'package:cashi_flow/presentation/pay_hub/pay_hub_screen.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -48,21 +48,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
-      GoRoute(
-        path: '/scan',
-        parentNavigatorKey: rootNavigatorKey,
-        pageBuilder: (context, state) => CustomTransitionPage(
-          child: const PayHubScreen(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return SharedAxisTransition(
-              animation: animation,
-              secondaryAnimation: secondaryAnimation,
-              transitionType: SharedAxisTransitionType.scaled,
-              child: child,
-            );
-          },
-        ),
-      ),
+
       GoRoute(
         path: '/onboarding',
         parentNavigatorKey: rootNavigatorKey,
@@ -101,25 +87,67 @@ class AppScaffold extends StatelessWidget {
 
     return Scaffold(
       body: child,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: currentIndex,
-        onDestinationSelected: (index) {
-          if (index == 0) context.go('/');
-          if (index == 1) context.go('/analytics');
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.analytics_outlined),
-            selectedIcon: Icon(Icons.analytics),
-            label: 'Analytics',
-          ),
-        ],
+      extendBody: true, // required for notched bottom app bar transparency
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => context.push('/add_transaction'),
+        child: const Icon(Icons.add, size: 28),
       ),
+      bottomNavigationBar: BottomAppBar(
+        notchMargin: 8.0,
+        height: 70,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _NavBarIcon(
+              icon: Icons.home_rounded,
+              isSelected: currentIndex == 0,
+              onTap: () => context.go('/'),
+            ),
+            _NavBarIcon(
+              icon: Icons.calendar_today_rounded,
+              isSelected: false,
+              onTap: () {}, // Placeholder for future calendar route
+            ),
+            const SizedBox(width: 48), // Space for the notched FAB
+            _NavBarIcon(
+              icon: Icons.account_balance_wallet_rounded,
+              isSelected: currentIndex == 1,
+              onTap: () => context.go('/analytics'),
+            ),
+            _NavBarIcon(
+              icon: Icons.person_outline_rounded,
+              isSelected: false,
+              onTap: () => context.push('/settings'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NavBarIcon extends StatelessWidget {
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _NavBarIcon({
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isSelected
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4);
+        
+    return IconButton(
+      icon: Icon(icon, size: 28),
+      color: color,
+      onPressed: onTap,
     );
   }
 }

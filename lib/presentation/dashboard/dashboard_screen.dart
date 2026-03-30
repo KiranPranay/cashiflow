@@ -19,7 +19,6 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
-    // Eagerly read the notification service to keep it alive
     ref.watch(notificationServiceProvider);
 
     final accountsAsync = ref.watch(accountsStreamProvider);
@@ -27,55 +26,61 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final settingsAsync = ref.watch(userSettingsStreamProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cashi Flow', style: TextStyle(fontWeight: FontWeight.bold)),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/add_transaction'),
-        icon: const Icon(Icons.add),
-        label: const Text('Add Transaction'),
-      ),
-      body: CustomScrollView(
-        slivers: [
-          // Global Net Worth & Savings
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-              child: _buildHeaderDash(accountsAsync, transactionsAsync, settingsAsync),
+      extendBody: true, // required for notched FAB transparent overlay
+      body: SafeArea(
+        bottom: false,
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            SliverAppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              pinned: true,
+              leading: IconButton(
+                icon: const Icon(Icons.grid_view_rounded),
+                onPressed: () {},
+              ),
+              title: const Text('Dashboard', 
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
+              centerTitle: true,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined),
+                  onPressed: () => context.push('/settings'),
+                ),
+              ],
             ),
-          ),
-          
-          // Accounts Overview
-          SliverToBoxAdapter(
-            child: _buildAccountsSection(accountsAsync),
-          ),
-          
-          // Inbox Alerts
-          SliverToBoxAdapter(
-            child: _buildInboxAlert(transactionsAsync),
-          ),
-
-          // Recent Activity
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Text(
-                'Recent Activity',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            
+            // Hero Dashboard Stack
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+                child: _buildHeaderDash(accountsAsync, transactionsAsync, settingsAsync),
               ),
             ),
-          ),
-          _buildRecentTransactions(transactionsAsync),
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
-        ],
+            
+            // Inbox Alerts
+            SliverToBoxAdapter(
+              child: _buildInboxAlert(transactionsAsync),
+            ),
+
+            // Accounts Overview (Optional Scroll)
+            SliverToBoxAdapter(
+              child: _buildAccountsSection(accountsAsync),
+            ),
+
+            // Recent Activity Section
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.only(left: 24.0, right: 24, top: 32, bottom: 16),
+                child: Text('Recent Activity', 
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
+              ),
+            ),
+            _buildRecentTransactions(transactionsAsync),
+            const SliverToBoxAdapter(child: SizedBox(height: 120)), // Padding for bottom nav
+          ],
+        ),
       ),
     );
   }
@@ -90,71 +95,158 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         final netWorth = accounts.fold<double>(0, (sum, acc) => sum + acc.balance);
         
         double currentMonthExpenses = 0;
+        double currentMonthIncome = 0;
+
         transactionsAsync.whenData((txs) {
           final now = DateTime.now();
-          currentMonthExpenses = txs.where((t) => 
-            t.type == 'Expense' && 
-            t.status == 'success' && 
-            t.timestamp.month == now.month && 
-            t.timestamp.year == now.year
-          ).fold(0.0, (sum, i) => sum + i.amount);
-        });
-
-        double expectedIncome = 0;
-        settingsAsync.whenData((s) {
-          if (s != null && s.expectedIncomes.isNotEmpty) {
-            expectedIncome = s.expectedIncomes.values.fold<double>(0.0, (sum, amt) => sum + amt);
+          for (var t in txs) {
+            if (t.status == 'success' && t.timestamp.month == now.month && t.timestamp.year == now.year) {
+              if (t.type == 'Expense') currentMonthExpenses += t.amount;
+              if (t.type == 'Income') currentMonthIncome += t.amount;
+            }
           }
         });
-        
-        double projectedSavings = expectedIncome - currentMonthExpenses;
 
+        // Main VISA Card
         return Column(
           children: [
+            // Visa Style Card
             Container(
-              padding: const EdgeInsets.all(24),
+              width: double.infinity,
+              padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
+                gradient: LinearGradient(
+                  colors: [
+                    Theme.of(context).colorScheme.inverseSurface,
+                    Theme.of(context).colorScheme.onSurface,
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 borderRadius: BorderRadius.circular(32),
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.15),
+                    offset: const Offset(0, 8),
+                    blurRadius: 24,
+                  )
+                ],
               ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Total Liquid Balance', style: TextStyle(color: Theme.of(context).colorScheme.onPrimaryContainer, fontSize: 16)),
-                  const SizedBox(height: 8),
-                  Text('₹${netWorth.toStringAsFixed(2)}', style: TextStyle(
-                    color: Theme.of(context).colorScheme.onPrimaryContainer, 
-                    fontSize: 40, fontWeight: FontWeight.bold,
-                  )),
-                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Expected Savings', style: TextStyle(color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.7))),
-                          Text('₹${projectedSavings.toStringAsFixed(0)}', style: TextStyle(
-                            color: projectedSavings >= 0 ? Colors.green.shade800 : Theme.of(context).colorScheme.error,
-                            fontWeight: FontWeight.bold, fontSize: 16,
-                          )),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text('Target Income', style: TextStyle(color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.7))),
-                          Text('₹${expectedIncome.toStringAsFixed(0)}', style: TextStyle(
-                            color: Theme.of(context).colorScheme.onPrimaryContainer,
-                            fontWeight: FontWeight.bold, fontSize: 16,
-                          )),
-                        ],
-                      ),
+                      Text('Available balance', 
+                        style: TextStyle(color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.7), fontSize: 16, fontWeight: FontWeight.w500)),
+                      Text('CASHI', 
+                        style: TextStyle(color: Theme.of(context).colorScheme.surface, fontSize: 20, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
                     ],
                   ),
+                  const SizedBox(height: 12),
+                  Text('₹${netWorth.toStringAsFixed(0)}', 
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.surface, 
+                      fontSize: 42, fontWeight: FontWeight.w800,
+                      letterSpacing: -1.0,
+                    )),
+                  const SizedBox(height: 48),
+                  Text('See details', 
+                    style: TextStyle(color: Theme.of(context).colorScheme.surface, fontSize: 14, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            
+            // Budget Pill
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Budget for this month', 
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSecondaryContainer, fontWeight: FontWeight.w600, fontSize: 14)),
+                      const SizedBox(height: 4),
+                      Text('Cash Available', 
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.6), fontSize: 12)),
+                    ],
+                  ),
+                  Text('₹${(netWorth - currentMonthExpenses).clamp(0, double.infinity).toStringAsFixed(0)}', 
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSecondaryContainer, fontSize: 24, fontWeight: FontWeight.w800)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Cash Grid (Income / Expense)
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F5E9), // Soft Mint Green
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF4CAF50),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.arrow_downward_rounded, color: Colors.white, size: 24),
+                        ),
+                        const SizedBox(height: 32),
+                        Text('₹${currentMonthIncome.toStringAsFixed(2)}', 
+                          style: const TextStyle(color: Colors.black87, fontSize: 22, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        const Text('Income', style: TextStyle(color: Colors.black54, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3E5F5), // Soft Pink/Purple
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF9C27B0),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 24),
+                        ),
+                        const SizedBox(height: 32),
+                        Text('₹${currentMonthExpenses.toStringAsFixed(2)}', 
+                          style: const TextStyle(color: Colors.black87, fontSize: 22, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        const Text('Expense', style: TextStyle(color: Colors.black54, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            )
           ],
         );
       },
@@ -171,23 +263,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 24.0, right: 24, top: 24, bottom: 12),
-              child: Text(
-                'Accounts & Cards',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
+            const Padding(
+              padding: EdgeInsets.only(left: 24.0, right: 24, top: 24, bottom: 12),
+              child: Text('Accounts & Cards', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
             ),
             SizedBox(
-              height: 160,
+              height: 140,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: accounts.length + 1,
                 itemBuilder: (context, index) {
-                  if (index == accounts.length) {
-                    return _buildAddAccountCard();
-                  }
+                  if (index == accounts.length) return _buildAddAccountCard();
                   return _buildAccountCard(accounts[index]);
                 },
               ),
@@ -202,9 +290,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Widget _buildAccountCard(AccountModel acc) {
     return Container(
-      width: 150,
+      width: 140,
       margin: const EdgeInsets.symmetric(horizontal: 8),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(24),
@@ -213,23 +301,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Icon(acc.type == 'Credit' ? Icons.credit_card : Icons.account_balance, 
-            color: Theme.of(context).colorScheme.primary),
+          Icon(acc.type == 'Credit' ? Icons.credit_card : Icons.account_balance_wallet, 
+            color: Theme.of(context).colorScheme.primary, size: 28),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(acc.name, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(acc.name, style: const TextStyle(fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
               const SizedBox(height: 4),
               Text(
                 '₹${acc.balance.abs().toStringAsFixed(0)}', 
                 style: TextStyle(
-                  fontWeight: FontWeight.bold, 
+                  fontWeight: FontWeight.w800, 
                   fontSize: 18,
                   color: acc.balance < 0 ? Theme.of(context).colorScheme.error : null,
                 )
               ),
-              if (acc.type == 'Credit')
-                Text('Limit: ₹${acc.creditLimit.toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
             ],
           )
         ],
@@ -238,26 +324,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildAddAccountCard() {
-    return InkWell(
-      onTap: () {
-        // Future route to add account directly via dialog or page
-      },
-      child: Container(
-        width: 150,
-        margin: const EdgeInsets.symmetric(horizontal: 8),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant, style: BorderStyle.solid),
-        ),
+    return Container(
+      width: 140,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant, style: BorderStyle.solid),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: () {},
         child: const Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add_circle_outline, size: 36),
+              Icon(Icons.add_circle_outline, size: 32),
               SizedBox(height: 8),
-              Text('Add Account', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('Add', style: TextStyle(fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -275,21 +359,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12),
           child: InkWell(
             onTap: () => context.push('/inbox'),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(24),
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.errorContainer,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(24),
               ),
               child: Row(
                 children: [
                   Icon(Icons.mark_email_unread, color: Theme.of(context).colorScheme.onErrorContainer),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: Text(
-                      'You have $pendingCount transaction(s) needing review from notifications.',
-                      style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer, fontWeight: FontWeight.bold),
+                      '$pendingCount review(s) pending',
+                      style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer, fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                   ),
                   Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onErrorContainer),
@@ -327,30 +411,50 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           delegate: SliverChildBuilderDelegate(
             (context, index) {
               final tx = recent[index];
-              return ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                leading: CircleAvatar(
-                  backgroundColor: tx.type == 'Expense' 
-                    ? Theme.of(context).colorScheme.errorContainer 
-                    : Theme.of(context).colorScheme.primaryContainer,
-                  child: Icon(
-                    tx.type == 'Expense' ? Icons.arrow_outward : Icons.south_west,
-                    color: tx.type == 'Expense' 
-                      ? Theme.of(context).colorScheme.onErrorContainer 
-                      : Theme.of(context).colorScheme.onPrimaryContainer,
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    )
+                  ]
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                  leading: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: tx.type == 'Expense' 
+                        ? Theme.of(context).colorScheme.errorContainer 
+                        : Theme.of(context).colorScheme.primaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      tx.type == 'Expense' ? Icons.call_made_rounded : Icons.call_received_rounded,
+                      color: tx.type == 'Expense' 
+                        ? Theme.of(context).colorScheme.onErrorContainer 
+                        : Theme.of(context).colorScheme.onPrimaryContainer,
+                      size: 20,
+                    ),
                   ),
-                ),
-                title: Text(tx.title.isNotEmpty ? tx.title : 'Unknown Payment', style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(
-                  '${tx.timestamp.day}/${tx.timestamp.month}/${tx.timestamp.year} • ${tx.type}',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                trailing: Text(
-                  '₹${tx.amount.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: tx.type == 'Expense' ? Theme.of(context).colorScheme.error : null,
+                  title: Text(tx.title.isNotEmpty ? tx.title : 'Payment', 
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  subtitle: Text(
+                    '${tx.timestamp.day}/${tx.timestamp.month} • ${tx.type}',
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                  ),
+                  trailing: Text(
+                    '₹${tx.amount.toStringAsFixed(0)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                      color: tx.type == 'Expense' ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                 ),
               );

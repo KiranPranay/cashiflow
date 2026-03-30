@@ -87,7 +87,12 @@ class _CashiFlowAppState extends ConsumerState<CashiFlowApp> {
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
         // Feed the dynamic colors into our AppTheme generator
-        final theme = AppTheme.buildAdaptiveTheme(darkDynamic);
+        final isDark = Brightness.dark == MediaQuery.platformBrightnessOf(context);
+        final theme = AppTheme.buildAdaptiveTheme(
+          lightDynamic, 
+          darkDynamic, 
+          isDark ? Brightness.dark : Brightness.light
+        );
         
         return MaterialApp.router(
           title: 'Cashi Flow',
