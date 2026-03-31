@@ -19,15 +19,22 @@ class NotificationService {
   final AccountRepository _accountRepo;
   final UserSettingsRepository _settingsRepo;
   StreamSubscription? _subscription;
+  bool _isProcessingQueue = false;
 
   NotificationService(this._repo, this._accountRepo, this._settingsRepo);
 
   void startListening() {
+    // 1. Fire up the offline queue syncer immediately on boot
+    _syncOfflineQueue();
+
+    // 2. Listen to live events if the app happens to be open
     _subscription?.cancel();
     _subscription = _notifChannel.receiveBroadcastStream().listen(
-      (event) {
+      (event) async {
         if (event is Map) {
-          _handlePaymentNotification(Map<String, String>.from(event));
+          final data = event.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
+          // Add to processing loop rather than concurrent executing to prevent race conditions
+          await _processSingleNotification(data);
         }
       },
       onError: (_) {},
@@ -39,11 +46,53 @@ class NotificationService {
     _subscription = null;
   }
 
-  Future<void> _handlePaymentNotification(Map<String, String> data) async {
+  Future<void> _syncOfflineQueue() async {
+    if (_isProcessingQueue) return;
+    _isProcessingQueue = true;
+
+    try {
+      final List<dynamic>? pendingRaw = await _upiChannel.invokeMethod('getPendingNotifications');
+      if (pendingRaw != null && pendingRaw.isNotEmpty) {
+        print("Found ${pendingRaw.length} offline queued notifications. Syncing now...");
+        
+        for (final rawItem in pendingRaw) {
+          if (rawItem is Map) {
+            final data = rawItem.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
+            final messageId = data['messageId'];
+            
+            // Process sequentially to prevent Gemini Rate Limits (HTTP 429)
+            final success = await _processSingleNotification(data);
+            
+            // If processing was purely successful (AI parsed, Hive saved), tell Android to nuke it from SharedPreferences
+            if (success && messageId != null) {
+               await _upiChannel.invokeMethod('removeQueuedNotification', {'id': messageId});
+               print("Removed synced notification $messageId from Native Queue.");
+            }
+            
+            // Respect API limits
+            await Future.delayed(const Duration(seconds: 2));
+          }
+        }
+      }
+    } catch (e) {
+      print("Offline Sync Engine Error: $e");
+    } finally {
+      _isProcessingQueue = false;
+    }
+  }
+
+  /// Returns true if the notification was completely processed and stored in the ledger.
+  /// Returns false if it failed due to Gemini Exception (no internet) so the Queue keeps it.
+  Future<bool> _processSingleNotification(Map<String, String> data) async {
     final rawTitle = data['rawTitle'] ?? '';
     final rawText = data['rawText'] ?? '';
     final fallbackAmount = data['amount'];
     final fallbackPayee = data['payee'] ?? 'Unknown Payment';
+    final messageId = data['messageId'];
+
+    // If we've already synced this transaction via a previous pass or live-stream, 
+    // it will have a matching rawText signature in Hive. We can do a quick de-dupe guard.
+    // However, SharedPreferences removal mitigates this natively.
 
     double? parsedAmount;
     String parsedPayee = fallbackPayee;
@@ -78,15 +127,21 @@ Notification Text: $rawText
           parsedPayee = jsonMap['payee'].toString();
         }
       } catch (e) {
+        // NO INTERNET, API LIMIT, OR SERVICE UNAVAILABLE
         print("Gemini Parsing Failed: $e");
+        // Returning FALSE indicates the Native Queue should NOT delete this message yet!
+        return false; 
       }
     }
 
-    // 2. Fallback to Native Regex if Gemini failed or missing
+    // 2. Fallback to Native Regex if Gemini wasn't configured or failed mapping
     if (parsedAmount == null) {
-      if (fallbackAmount == null) return;
+      if (fallbackAmount == null || fallbackAmount.isEmpty) {
+        // Completely useless notification, mark as processed so Native queue deletes it
+        return true; 
+      }
       parsedAmount = double.tryParse(fallbackAmount);
-      if (parsedAmount == null) return;
+      if (parsedAmount == null) return true; // Malformed fallback
     }
 
     // 3. Match against pending interactions
@@ -97,7 +152,7 @@ Notification Text: $rawText
       final confirmed = pending.copyWith(
         status: 'success',
         title: parsedPayee != 'Unknown Payment' ? parsedPayee : pending.title,
-        description: parsedPayee.isNotEmpty ? 'Payee: $parsedPayee (UPI)' : pending.description,
+        description: parsedPayee.isNotEmpty ? 'Payee: $parsedPayee (UPI via Offline Sync)' : pending.description,
       );
       await _repo.updateTransaction(confirmed);
 
@@ -113,7 +168,7 @@ Notification Text: $rawText
     } else {
       // Unplanned transaction - send to Needs Review inbox
       final newTx = TransactionModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: messageId ?? DateTime.now().millisecondsSinceEpoch.toString(), // Use native ID to prevent exact duplicates naturally
         amount: parsedAmount,
         timestamp: DateTime.now(),
         title: parsedPayee.isNotEmpty ? 'Payment to $parsedPayee' : 'Unknown Transfer',
@@ -123,8 +178,18 @@ Notification Text: $rawText
         status: 'needs_review',
         rawNotificationText: "$rawTitle : $rawText",
       );
-      await _repo.addTransaction(newTx);
+      
+      // Attempt to save to Hive. If it fails, we shouldn't clear the queue.
+      try {
+        await _repo.addTransaction(newTx);
+      } catch (e) {
+        print("Failed to save synced transaction to Hive: $e");
+        return false; // Leave in native queue
+      }
     }
+
+    // If we reach here, Ledger successfully synced data!
+    return true; 
   }
 
   static Future<bool> isPermissionGranted() async {

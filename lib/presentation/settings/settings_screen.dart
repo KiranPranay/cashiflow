@@ -8,6 +8,7 @@ import 'package:cashi_flow/domain/models/user_settings_model.dart';
 import 'package:cashi_flow/domain/providers/user_settings_providers.dart';
 import 'package:cashi_flow/domain/providers/account_providers.dart';
 import 'package:cashi_flow/domain/providers/category_providers.dart';
+import 'package:cashi_flow/data/services/notification_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -133,6 +134,57 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
 
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+          // App Permissions
+          SliverToBoxAdapter(
+            child: ExpansionTile(
+              initiallyExpanded: true,
+              leading: const Icon(Icons.security, color: Colors.blueGrey),
+              title: const Text('System Permissions', style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: const Text('Manage background data access'),
+              children: [
+                FutureBuilder<bool>(
+                  future: NotificationService.isPermissionGranted(),
+                  builder: (context, snapshot) {
+                    final isGranted = snapshot.data ?? false;
+                    return ListTile(
+                      title: const Text('Notification Listener'),
+                      subtitle: Text(
+                        isGranted 
+                          ? 'Active • Capturing background banking SMS' 
+                          : 'Missing • App cannot read SMS offline. Tap to enable.',
+                        style: TextStyle(
+                          color: isGranted ? Colors.green.shade700 : Colors.red.shade700,
+                          fontWeight: isGranted ? FontWeight.normal : FontWeight.bold,
+                        ),
+                      ),
+                      trailing: Icon(
+                        isGranted ? Icons.check_circle : Icons.warning_amber_rounded,
+                        color: isGranted ? Colors.green : Colors.red,
+                      ),
+                      onTap: () async {
+                        await NotificationService.requestPermission();
+                        // Trigger a rebuild when returning to update status
+                        setState(() {});
+                      },
+                    );
+                  },
+                ),
+                ListTile(
+                  title: const Text('Battery Management'),
+                  subtitle: const Text('Ensure app is allowed un-restricted background usage to prevent dropping tasks.'),
+                  trailing: const Icon(Icons.battery_saver, color: Colors.grey),
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Check your Physical Device Settings -> Apps -> Cashi Flow -> Battery -> Set to Unrestricted.')),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          const SliverToBoxAdapter(child: Divider()),
 
           // Integrations
           SliverToBoxAdapter(

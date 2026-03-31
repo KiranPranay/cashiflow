@@ -7,10 +7,13 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.text.TextUtils
+import android.content.Context
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import org.json.JSONArray
+import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
     private val UPI_CHANNEL = "com.cashi_flow/upi"
@@ -31,6 +34,8 @@ class MainActivity : FlutterActivity() {
                         openNotificationAccessSettings()
                         result.success(true)
                     }
+                    "getPendingNotifications" -> handleGetPendingNotifications(result)
+                    "removeQueuedNotification" -> handleRemoveQueuedNotification(call.argument("id"), result)
                     else -> result.notImplemented()
                 }
             }
@@ -131,5 +136,59 @@ class MainActivity : FlutterActivity() {
     private fun openNotificationAccessSettings() {
         val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
         startActivity(intent)
+    }
+
+    private fun handleGetPendingNotifications(result: MethodChannel.Result) {
+        try {
+            val prefs = getSharedPreferences("cashi_flow_notifications", Context.MODE_PRIVATE)
+            val jsonStr = prefs.getString("pending_sms", "[]") ?: "[]"
+            val jsonArray = JSONArray(jsonStr)
+            
+            val pendingList = mutableListOf<Map<String, String>>()
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val map = mutableMapOf<String, String>()
+                val keys = obj.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    map[key] = obj.getString(key)
+                }
+                pendingList.add(map)
+            }
+            
+            result.success(pendingList)
+        } catch (e: Exception) {
+            result.error("QUEUE_ERROR", "Failed to retrieve offline queue", e.message)
+        }
+    }
+
+    private fun handleRemoveQueuedNotification(id: String?, result: MethodChannel.Result) {
+        if (id == null) {
+            result.error("INVALID_ARGS", "Message ID is required", null)
+            return
+        }
+        try {
+            val prefs = getSharedPreferences("cashi_flow_notifications", Context.MODE_PRIVATE)
+            val jsonStr = prefs.getString("pending_sms", "[]") ?: "[]"
+            val oldArray = JSONArray(jsonStr)
+            val newArray = JSONArray()
+            
+            var found = false
+            for (i in 0 until oldArray.length()) {
+                val obj = oldArray.getJSONObject(i)
+                if (obj.optString("messageId") == id) {
+                    found = true
+                    continue // Skip adding this item to effectively delete it
+                }
+                newArray.put(obj)
+            }
+            
+            if (found) {
+                prefs.edit().putString("pending_sms", newArray.toString()).apply()
+            }
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("QUEUE_ERROR", "Failed to clear queue item", e.message)
+        }
     }
 }

@@ -1,8 +1,12 @@
 package com.pranay.cashi_flow.cashi_flow
 
+import android.content.Context
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.UUID
 
 /**
  * Listens for payment confirmation notifications from UPI apps.
@@ -39,11 +43,36 @@ class UpiNotificationListenerService : NotificationListenerService() {
 
         Log.d(TAG, "SMS notification from $pkg => title='$title', text='$bigText'")
 
-        // Try to parse payment info from the notification
         val parsed = parsePaymentNotification(pkg, title, bigText)
         if (parsed != null) {
-            Log.d(TAG, "Parsed payment: $parsed")
-            onPaymentNotification?.invoke(parsed)
+            val mutableParsed = parsed.toMutableMap()
+            mutableParsed["messageId"] = UUID.randomUUID().toString()
+            
+            Log.d(TAG, "Parsed payment: $mutableParsed")
+            
+            // **New Architecture:** Permanently save to disk until Flutter explicitly deletes it.
+            queueNotification(mutableParsed)
+
+            // Continue attempting live UI dispatch if the app happens to be open
+            onPaymentNotification?.invoke(mutableParsed)
+        }
+    }
+
+    private fun queueNotification(parsed: Map<String, String>) {
+        val prefs = applicationContext.getSharedPreferences("cashi_flow_notifications", Context.MODE_PRIVATE)
+        val currentQueueStr = prefs.getString("pending_sms", "[]")
+        
+        try {
+            val jsonArray = JSONArray(currentQueueStr)
+            val jsonObject = JSONObject()
+            
+            parsed.forEach { (key, value) -> jsonObject.put(key, value) }
+            jsonArray.put(jsonObject)
+            
+            prefs.edit().putString("pending_sms", jsonArray.toString()).apply()
+            Log.d(TAG, "Queued SMS locally. Queue size: ${jsonArray.length()}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to queue notification", e)
         }
     }
 
