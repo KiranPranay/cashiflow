@@ -107,6 +107,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           }
         });
 
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+
         // Main VISA Card
         return Column(
           children: [
@@ -115,10 +117,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
+                gradient: const LinearGradient(
                   colors: [
-                    Theme.of(context).colorScheme.inverseSurface,
-                    Theme.of(context).colorScheme.onSurface,
+                    Color(0xFF32363B),
+                    Color(0xFF141518),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -126,7 +128,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 borderRadius: BorderRadius.circular(32),
                 boxShadow: [
                   BoxShadow(
-                    color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.15),
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
                     offset: const Offset(0, 8),
                     blurRadius: 24,
                   )
@@ -135,25 +137,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  const Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Available balance', 
-                        style: TextStyle(color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.7), fontSize: 16, fontWeight: FontWeight.w500)),
+                        style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w500)),
                       Text('CASHI', 
-                        style: TextStyle(color: Theme.of(context).colorScheme.surface, fontSize: 20, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
+                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Text('₹${netWorth.toStringAsFixed(0)}', 
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.surface, 
+                    style: const TextStyle(
+                      color: Colors.white, 
                       fontSize: 42, fontWeight: FontWeight.w800,
                       letterSpacing: -1.0,
                     )),
                   const SizedBox(height: 48),
-                  Text('See details', 
-                    style: TextStyle(color: Theme.of(context).colorScheme.surface, fontSize: 14, fontWeight: FontWeight.w600)),
+                  const Text('See details', 
+                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -164,7 +166,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.secondaryContainer,
+                color: Theme.of(context).colorScheme.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(24),
               ),
               child: Row(
@@ -174,14 +176,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Budget for this month', 
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSecondaryContainer, fontWeight: FontWeight.w600, fontSize: 14)),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w600, fontSize: 14)),
                       const SizedBox(height: 4),
                       Text('Cash Available', 
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.6), fontSize: 12)),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 12)),
                     ],
                   ),
                   Text('₹${(netWorth - currentMonthExpenses).clamp(0, double.infinity).toStringAsFixed(0)}', 
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSecondaryContainer, fontSize: 24, fontWeight: FontWeight.w800)),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 24, fontWeight: FontWeight.w800)),
                 ],
               ),
             ),
@@ -194,7 +196,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE8F5E9), // Soft Mint Green
+                      color: isDark ? const Color(0xFF1B5E20).withValues(alpha: 0.2) : const Color(0xFFE8F5E9),
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: Column(
@@ -210,9 +212,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                         const SizedBox(height: 32),
                         Text('₹${currentMonthIncome.toStringAsFixed(2)}', 
-                          style: const TextStyle(color: Colors.black87, fontSize: 22, fontWeight: FontWeight.w800)),
+                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 22, fontWeight: FontWeight.w800)),
                         const SizedBox(height: 4),
-                        const Text('Income', style: TextStyle(color: Colors.black54, fontSize: 14)),
+                        Text('Income', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 14)),
                       ],
                     ),
                   ),
@@ -222,7 +224,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF3E5F5), // Soft Pink/Purple
+                      color: isDark ? const Color(0xFF4A148C).withValues(alpha: 0.2) : const Color(0xFFF3E5F5),
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: Column(
@@ -238,9 +240,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                         const SizedBox(height: 32),
                         Text('₹${currentMonthExpenses.toStringAsFixed(2)}', 
-                          style: const TextStyle(color: Colors.black87, fontSize: 22, fontWeight: FontWeight.w800)),
+                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 22, fontWeight: FontWeight.w800)),
                         const SizedBox(height: 4),
-                        const Text('Expense', style: TextStyle(color: Colors.black54, fontSize: 14)),
+                        Text('Expense', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 14)),
                       ],
                     ),
                   ),

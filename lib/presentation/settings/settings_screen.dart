@@ -18,6 +18,44 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, bottom: 8, top: 24),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.primary,
+          fontWeight: FontWeight.w800,
+          fontSize: 12,
+          letterSpacing: 1.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsGroup(List<Widget> children) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Column(
+          children: children,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(userSettingsStreamProvider);
@@ -25,212 +63,180 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final categoriesAsync = ref.watch(categoriesStreamProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Configuration & Settings')),
+      appBar: AppBar(
+        title: const Text('Configuration & Settings'),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+      ),
       body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
         slivers: [
-          // Income Sources
           SliverToBoxAdapter(
-            child: settingsAsync.when(
-              data: (settings) {
-                if (settings == null) return const SizedBox.shrink();
-                final incomes = settings.expectedIncomes;
-                final totalIncome = incomes.values.fold<double>(0.0, (s, amt) => s + amt);
-
-                return ExpansionTile(
-                  initiallyExpanded: true,
-                  leading: const Icon(Icons.account_balance_wallet, color: Colors.green),
-                  title: const Text('Income Sources', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('Total Expected: ₹${totalIncome.toStringAsFixed(0)}'),
-                  children: [
-                    ...incomes.entries.map((e) => ListTile(
-                      title: Text(e.key),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSectionHeader('FINANCIAL STRUCTURE'),
+                _buildSettingsGroup([
+                  // Income
+                  settingsAsync.when(
+                    data: (settings) {
+                      if (settings == null) return const SizedBox.shrink();
+                      final totalIncome = settings.expectedIncomes.values.fold<double>(0.0, (s, amt) => s + amt);
+                      return ExpansionTile(
+                        shape: const Border(),
+                        collapsedShape: const Border(),
+                        leading: const Icon(Icons.account_balance_wallet_rounded, color: Colors.green),
+                        title: const Text('Income Sources', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: Text('Expected: ₹${totalIncome.toStringAsFixed(0)} / mo'),
                         children: [
-                          Text('₹${e.value.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _deleteIncome(settings, e.key),
+                          ...settings.expectedIncomes.entries.map((e) => ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 32),
+                            title: Text(e.key),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('₹${e.value.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => _deleteIncome(settings, e.key)),
+                              ],
+                            ),
+                          )),
+                          ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 32),
+                            leading: const Icon(Icons.add_circle_outline, color: Colors.green),
+                            title: const Text('Add Income Source', style: TextStyle(color: Colors.green)),
+                            onTap: () => _showAddIncomeDialog(settings),
                           ),
                         ],
-                      ),
-                    )),
-                    TextButton.icon(
-                      onPressed: () => _showAddIncomeDialog(settings),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add Income Source'),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
-          ),
-
-          const SliverToBoxAdapter(child: Divider()),
-
-          // Accounts
-          SliverToBoxAdapter(
-            child: accountsAsync.when(
-              data: (accounts) => ExpansionTile(
-                leading: const Icon(Icons.account_balance, color: Colors.blue),
-                title: const Text('Accounts & Credit Cards', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text('${accounts.length} linked accounts'),
-                children: [
-                  ...accounts.map((acc) => ListTile(
-                    leading: Icon(acc.type == 'Credit' ? Icons.credit_card : Icons.monetization_on),
-                    title: Text(acc.name),
-                    subtitle: Text('${acc.type} • ₹${acc.balance.toStringAsFixed(0)}'),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => _deleteAccount(acc.id),
-                    ),
-                  )),
-                  TextButton.icon(
-                    onPressed: () => _showAddAccountDialog(),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add New Account / Card'),
+                      );
+                    },
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
                   ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
-          ),
+                  Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5)),
 
-          const SliverToBoxAdapter(child: Divider()),
-
-          // Categories
-          SliverToBoxAdapter(
-            child: categoriesAsync.when(
-              data: (cats) => ExpansionTile(
-                leading: const Icon(Icons.category, color: Colors.orange),
-                title: const Text('Categories', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text('${cats.length} active categories'),
-                children: [
-                  ...cats.map((cat) => ListTile(
-                    leading: const Icon(Icons.label),
-                    title: Text(cat.name),
-                    subtitle: Text(cat.type),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => _deleteCategory(cat.id),
-                    ),
-                  )),
-                  TextButton.icon(
-                    onPressed: () => _showAddCategoryDialog(),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Custom Category'),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
-          ),
-
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
-          // App Permissions
-          SliverToBoxAdapter(
-            child: ExpansionTile(
-              initiallyExpanded: true,
-              leading: const Icon(Icons.security, color: Colors.blueGrey),
-              title: const Text('System Permissions', style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: const Text('Manage background data access'),
-              children: [
-                FutureBuilder<bool>(
-                  future: NotificationService.isPermissionGranted(),
-                  builder: (context, snapshot) {
-                    final isGranted = snapshot.data ?? false;
-                    return ListTile(
-                      title: const Text('Notification Listener'),
-                      subtitle: Text(
-                        isGranted 
-                          ? 'Active • Capturing background banking SMS' 
-                          : 'Missing • App cannot read SMS offline. Tap to enable.',
-                        style: TextStyle(
-                          color: isGranted ? Colors.green.shade700 : Colors.red.shade700,
-                          fontWeight: isGranted ? FontWeight.normal : FontWeight.bold,
+                  // Accounts
+                  accountsAsync.when(
+                    data: (accounts) => ExpansionTile(
+                      shape: const Border(),
+                      collapsedShape: const Border(),
+                      leading: const Icon(Icons.account_balance_rounded, color: Colors.blue),
+                      title: const Text('Accounts & Cards', style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text('${accounts.length} linked assets'),
+                      children: [
+                        ...accounts.map((acc) => ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 32),
+                          title: Text(acc.name),
+                          subtitle: Text(acc.type),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('₹${acc.balance.abs().toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => _deleteAccount(acc.id)),
+                            ],
+                          ),
+                        )),
+                        ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 32),
+                          leading: const Icon(Icons.add_circle_outline, color: Colors.blue),
+                          title: const Text('Link New Account', style: TextStyle(color: Colors.blue)),
+                          onTap: () => _showAddAccountDialog(),
                         ),
-                      ),
-                      trailing: Icon(
-                        isGranted ? Icons.check_circle : Icons.warning_amber_rounded,
-                        color: isGranted ? Colors.green : Colors.red,
-                      ),
-                      onTap: () async {
-                        await NotificationService.requestPermission();
-                        // Trigger a rebuild when returning to update status
-                        setState(() {});
-                      },
-                    );
-                  },
-                ),
-                ListTile(
-                  title: const Text('Battery Management'),
-                  subtitle: const Text('Ensure app is allowed un-restricted background usage to prevent dropping tasks.'),
-                  trailing: const Icon(Icons.battery_saver, color: Colors.grey),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Check your Physical Device Settings -> Apps -> Cashi Flow -> Battery -> Set to Unrestricted.')),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
+                      ],
+                    ),
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
+                  ),
+                  Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5)),
 
-          const SliverToBoxAdapter(child: Divider()),
+                  // Categories
+                  categoriesAsync.when(
+                    data: (cats) => ExpansionTile(
+                      shape: const Border(),
+                      collapsedShape: const Border(),
+                      leading: const Icon(Icons.category_rounded, color: Colors.orange),
+                      title: const Text('Categories', style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text('${cats.length} active tags'),
+                      children: [
+                        ...cats.map((cat) => ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 32),
+                          title: Text(cat.name),
+                          subtitle: Text(cat.type),
+                          trailing: IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => _deleteCategory(cat.id)),
+                        )),
+                        ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 32),
+                          leading: const Icon(Icons.add_circle_outline, color: Colors.orange),
+                          title: const Text('Create Category', style: TextStyle(color: Colors.orange)),
+                          onTap: () => _showAddCategoryDialog(),
+                        ),
+                      ],
+                    ),
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
+                  ),
+                ]),
 
-          // Integrations
-          SliverToBoxAdapter(
-            child: settingsAsync.when(
-              data: (settings) => ExpansionTile(
-                leading: const Icon(Icons.api, color: Colors.purple),
-                title: const Text('Integrations & AI', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Configure Gemini AI parser'),
-                children: [
+                _buildSectionHeader('SYSTEM INTEGRATIONS'),
+                _buildSettingsGroup([
+                  // AI Parser
+                  settingsAsync.when(
+                    data: (settings) => ListTile(
+                      leading: const Icon(Icons.auto_awesome, color: Colors.purpleAccent),
+                      title: const Text('Gemini Engine API', style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(settings?.geminiApiKey != null ? 'Linked' : 'Not configured'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _showEditGeminiKeyDialog(settings),
+                    ),
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
+                  ),
+                  Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  
+                  // Permissions
+                  FutureBuilder<bool>(
+                    future: NotificationService.isPermissionGranted(),
+                    builder: (context, snapshot) {
+                      final isGranted = snapshot.data ?? false;
+                      return ListTile(
+                        leading: const Icon(Icons.shield_rounded, color: Colors.blueGrey),
+                        title: const Text('Offline Text Sync', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: Text(isGranted ? 'Active' : 'Missing access'),
+                        trailing: Icon(isGranted ? Icons.check_circle : Icons.warning_amber_rounded, color: isGranted ? Colors.green : Colors.red),
+                        onTap: () async {
+                          await NotificationService.requestPermission();
+                          setState(() {});
+                        },
+                      );
+                    },
+                  ),
+                  Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5)),
+
+                  // Battery
                   ListTile(
-                    title: const Text('Gemini API Key'),
-                    subtitle: Text(settings?.geminiApiKey != null ? 'Key configured (starts with ${settings!.geminiApiKey!.substring(0, 4)}...)' : 'Not configured'),
-                    trailing: const Icon(Icons.edit),
-                    onTap: () => _showEditGeminiKeyDialog(settings),
+                    leading: const Icon(Icons.battery_charging_full_rounded, color: Colors.blueGrey),
+                    title: const Text('Unrestricted Battery', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Required for background processing'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please allow background usage in Android App Info settings.')),
+                      );
+                    },
                   ),
-                ],
-              ),
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
-          ),
+                ]),
 
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
-
-          // Danger Zone
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Card(
-                color: Theme.of(context).colorScheme.errorContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      Text('Danger Zone', style: TextStyle(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.bold, fontSize: 18)),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
-                        onPressed: () => _confirmWipe(context, ref),
-                        icon: const Icon(Icons.delete_forever),
-                        label: const Text('Wipe All Data & Restart Setup'),
-                      ),
-                    ],
+                _buildSectionHeader('MAINTENANCE'),
+                _buildSettingsGroup([
+                  ListTile(
+                    leading: const Icon(Icons.delete_forever_rounded, color: Colors.red),
+                    title: const Text('Wipe All Data', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Erases ledger completely'),
+                    onTap: () => _confirmWipe(context, ref),
                   ),
-                ),
-              ),
+                ]),
+                
+                const SizedBox(height: 120),
+              ],
             ),
           ),
         ],

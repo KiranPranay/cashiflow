@@ -94,7 +94,9 @@ class AppScaffold extends StatelessWidget {
         child: const Icon(Icons.add, size: 28),
       ),
       bottomNavigationBar: BottomAppBar(
+        shape: const CircularNotchedRectangle(),
         notchMargin: 8.0,
+        clipBehavior: Clip.antiAlias,
         height: 70,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
