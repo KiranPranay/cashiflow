@@ -1,5 +1,10 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
+
 part of 'user_settings_model.dart';
+
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
 
 class UserSettingsModelAdapter extends TypeAdapter<UserSettingsModel> {
   @override
@@ -12,10 +17,10 @@ class UserSettingsModelAdapter extends TypeAdapter<UserSettingsModel> {
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
     return UserSettingsModel(
-      id: fields[0] as String? ?? 'settings',
-      expectedIncomes: (fields[1] as Map?)?.cast<String, double>() ?? const {'Salary': 0.0},
+      id: fields[0] as String,
+      expectedIncomes: (fields[1] as Map).cast<String, double>(),
       baseBankAccountId: fields[2] as String?,
-      onboardingCompleted: fields[3] as bool? ?? false,
+      onboardingCompleted: fields[3] as bool,
       lastNotificationCleanup: fields[4] as DateTime?,
       geminiApiKey: fields[5] as String?,
     );

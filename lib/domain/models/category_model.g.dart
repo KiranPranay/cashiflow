@@ -1,5 +1,10 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
+
 part of 'category_model.dart';
+
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
 
 class CategoryModelAdapter extends TypeAdapter<CategoryModel> {
   @override

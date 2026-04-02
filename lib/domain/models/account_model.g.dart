@@ -1,5 +1,10 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
+
 part of 'account_model.dart';
+
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
 
 class AccountModelAdapter extends TypeAdapter<AccountModel> {
   @override
