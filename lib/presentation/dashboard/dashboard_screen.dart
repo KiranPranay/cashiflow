@@ -440,9 +440,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     if (account != null) {
                       final newBal = tx.type == 'Expense'
                         ? account.balance + tx.amount
-                        : account.balance - tx.amount;
+                        : (tx.type == 'Income' 
+                           ? account.balance - tx.amount
+                           : account.balance + tx.amount); // If Transfer, source was deducted
                       await accRepo.updateAccount(account.copyWith(balance: newBal));
                     }
+                  }
+                  
+                  if (tx.type == 'Transfer' && tx.destinationAccountId != null) {
+                      final destAccount = await accRepo.getAccountById(tx.destinationAccountId!);
+                      if (destAccount != null) {
+                        await accRepo.updateAccount(destAccount.copyWith(balance: destAccount.balance - tx.amount));
+                      }
                   }
                   
                   if (context.mounted) {
@@ -463,9 +472,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               if (currentAcc != null) {
                                 final originalBal = tx.type == 'Expense'
                                   ? currentAcc.balance - tx.amount
-                                  : currentAcc.balance + tx.amount;
+                                  : (tx.type == 'Income' 
+                                     ? currentAcc.balance + tx.amount
+                                     : currentAcc.balance - tx.amount);
                                 await accRepo.updateAccount(currentAcc.copyWith(balance: originalBal));
                               }
+                            }
+                            if (tx.type == 'Transfer' && tx.destinationAccountId != null) {
+                                final destAccount = await accRepo.getAccountById(tx.destinationAccountId!);
+                                if (destAccount != null) {
+                                  await accRepo.updateAccount(destAccount.copyWith(balance: destAccount.balance + tx.amount));
+                                }
                             }
                           },
                         ),
@@ -495,16 +512,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     leading: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: tx.type == 'Expense' 
-                          ? Theme.of(context).colorScheme.errorContainer 
-                          : Theme.of(context).colorScheme.primaryContainer,
+                        color: tx.type == 'Transfer'
+                          ? Theme.of(context).colorScheme.secondaryContainer
+                          : (tx.type == 'Expense' 
+                              ? Theme.of(context).colorScheme.errorContainer 
+                              : Theme.of(context).colorScheme.primaryContainer),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        tx.type == 'Expense' ? Icons.call_made_rounded : Icons.call_received_rounded,
-                        color: tx.type == 'Expense' 
-                          ? Theme.of(context).colorScheme.onErrorContainer 
-                          : Theme.of(context).colorScheme.onPrimaryContainer,
+                        tx.type == 'Transfer' ? Icons.swap_horiz : (tx.type == 'Expense' ? Icons.call_made_rounded : Icons.call_received_rounded),
+                        color: tx.type == 'Transfer'
+                          ? Theme.of(context).colorScheme.onSecondaryContainer
+                          : (tx.type == 'Expense' 
+                              ? Theme.of(context).colorScheme.onErrorContainer 
+                              : Theme.of(context).colorScheme.onPrimaryContainer),
                         size: 20,
                       ),
                     ),
@@ -519,7 +540,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 16,
-                        color: tx.type == 'Expense' ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.primary,
+                        color: tx.type == 'Transfer' 
+                          ? Theme.of(context).colorScheme.onSurface
+                          : (tx.type == 'Expense' ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.primary),
                       ),
                     ),
                   ),

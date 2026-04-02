@@ -22,6 +22,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
   String _type = 'Expense';
   String? _accountId;
+  String? _destinationAccountId;
   String? _categoryId;
   late DateTime _selectedDate;
   bool _isLoading = false;
@@ -73,8 +74,16 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   void _save({bool isPending = false}) async {
-    if (_amountCtrl.text.isEmpty || _titleCtrl.text.isEmpty || _accountId == null || _categoryId == null) {
+    if (_amountCtrl.text.isEmpty || _titleCtrl.text.isEmpty || _accountId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all required fields')));
+      return;
+    }
+    if (_type == 'Transfer' && _destinationAccountId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a destination account')));
+      return;
+    }
+    if (_type != 'Transfer' && _categoryId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a category')));
       return;
     }
 
@@ -89,7 +98,8 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         title: _titleCtrl.text,
         type: _type,
         accountId: _accountId!,
-        categoryId: _categoryId!,
+        categoryId: _type != 'Transfer' ? _categoryId : null,
+        destinationAccountId: _type == 'Transfer' ? _destinationAccountId : null,
         description: _descCtrl.text,
         status: isPending ? 'pending' : 'success', 
       );
@@ -102,8 +112,17 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         final accountRepo = ref.read(accountRepositoryProvider);
         final account = await accountRepo.getAccountById(_accountId!);
         if (account != null) {
-          final double newBal = _type == 'Expense' ? account.balance - amt : account.balance + amt;
+          final double newBal = _type == 'Expense' 
+            ? account.balance - amt 
+            : (_type == 'Income' ? account.balance + amt : account.balance - amt);
           await accountRepo.updateAccount(account.copyWith(balance: newBal));
+        }
+
+        if (_type == 'Transfer' && _destinationAccountId != null) {
+          final destAccount = await accountRepo.getAccountById(_destinationAccountId!);
+          if (destAccount != null) {
+            await accountRepo.updateAccount(destAccount.copyWith(balance: destAccount.balance + amt));
+          }
         }
       }
 
@@ -143,6 +162,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             SegmentedButton<String>(
               segments: const [
                 ButtonSegment(value: 'Expense', label: Text('Expense'), icon: Icon(Icons.arrow_upward)),
+                ButtonSegment(value: 'Transfer', label: Text('Transfer'), icon: Icon(Icons.swap_horiz)),
                 ButtonSegment(value: 'Income', label: Text('Income'), icon: Icon(Icons.arrow_downward)),
               ],
               selected: {_type},
@@ -191,27 +211,39 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 value: _accountId,
                 items: accounts.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
                 onChanged: (v) => setState(() => _accountId = v),
-                decoration: const InputDecoration(labelText: 'Account', prefixIcon: Icon(Icons.account_balance)),
+                decoration: InputDecoration(labelText: _type == 'Transfer' ? 'Transfer From' : 'Account', prefixIcon: const Icon(Icons.account_balance)),
               ),
               loading: () => const LinearProgressIndicator(),
               error: (e, s) => const Text('Error loading accounts'),
             ),
             
             const SizedBox(height: 16),
-            // Category Selector
-            categoriesAsync.when(
-              data: (cats) {
-                final filtered = cats.where((c) => c.type == _type).toList();
-                return DropdownButtonFormField<String>(
-                  value: _categoryId,
-                  items: filtered.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-                  onChanged: (v) => setState(() => _categoryId = v),
-                  decoration: const InputDecoration(labelText: 'Category', prefixIcon: Icon(Icons.category)),
-                );
-              },
-              loading: () => const LinearProgressIndicator(),
-              error: (e, s) => const Text('Error loading categories'),
-            ),
+            if (_type != 'Transfer')
+              categoriesAsync.when(
+                data: (cats) {
+                  final filtered = cats.where((c) => c.type == _type).toList();
+                  return DropdownButtonFormField<String>(
+                    value: _categoryId,
+                    items: filtered.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+                    onChanged: (v) => setState(() => _categoryId = v),
+                    decoration: const InputDecoration(labelText: 'Category', prefixIcon: Icon(Icons.category)),
+                  );
+                },
+                loading: () => const LinearProgressIndicator(),
+                error: (e, s) => const Text('Error loading categories'),
+              ),
+            
+            if (_type == 'Transfer')
+              accountsAsync.when(
+                data: (accounts) => DropdownButtonFormField<String>(
+                  value: _destinationAccountId,
+                  items: accounts.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
+                  onChanged: (v) => setState(() => _destinationAccountId = v),
+                  decoration: const InputDecoration(labelText: 'Transfer To', prefixIcon: Icon(Icons.account_balance)),
+                ),
+                loading: () => const LinearProgressIndicator(),
+                error: (e, s) => const Text('Error loading accounts'),
+              ),
             
             const SizedBox(height: 16),
             TextField(

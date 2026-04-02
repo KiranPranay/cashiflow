@@ -42,17 +42,21 @@ class InboxScreen extends ConsumerWidget {
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 shape: RoundedRectangleBorder(
                   side: BorderSide(
-                    color: tx.type == 'Expense' 
-                      ? Theme.of(context).colorScheme.error.withValues(alpha: 0.5) 
-                      : Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                    color: tx.type == 'Transfer'
+                      ? Theme.of(context).colorScheme.secondary.withValues(alpha: 0.5)
+                      : (tx.type == 'Expense' 
+                          ? Theme.of(context).colorScheme.error.withValues(alpha: 0.5) 
+                          : Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)),
                     width: 1
                   ),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: ListTile(
                   leading: Icon(
-                    tx.type == 'Expense' ? Icons.call_made_rounded : Icons.call_received_rounded,
-                    color: tx.type == 'Expense' ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.primary,
+                    tx.type == 'Transfer' ? Icons.swap_horiz : (tx.type == 'Expense' ? Icons.call_made_rounded : Icons.call_received_rounded),
+                    color: tx.type == 'Transfer'
+                      ? Theme.of(context).colorScheme.secondary
+                      : (tx.type == 'Expense' ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.primary),
                   ),
                   title: Text(tx.title, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text('${tx.type} • Caught from Notification\n₹${tx.amount.toStringAsFixed(2)}'),

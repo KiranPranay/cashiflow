@@ -22,7 +22,9 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
   late TextEditingController _amountCtrl;
   String? _accountId;
   String? _categoryId;
+  String? _destinationAccountId;
   late DateTime _selectedTimestamp;
+  String _type = 'Expense';
 
   bool get _isManual => widget.tx.rawNotificationText == null || widget.tx.rawNotificationText!.isEmpty;
 
@@ -32,6 +34,7 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
     _titleCtrl = TextEditingController(text: widget.tx.title);
     _amountCtrl = TextEditingController(text: widget.tx.amount.toStringAsFixed(2));
     _selectedTimestamp = widget.tx.timestamp;
+    _type = widget.tx.type;
     
     if (widget.tx.accountId.isNotEmpty) {
       _accountId = widget.tx.accountId;
@@ -39,6 +42,10 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
     
     if (widget.tx.categoryId != null && widget.tx.categoryId!.isNotEmpty) {
       _categoryId = widget.tx.categoryId;
+    }
+    
+    if (widget.tx.destinationAccountId != null && widget.tx.destinationAccountId!.isNotEmpty) {
+      _destinationAccountId = widget.tx.destinationAccountId;
     }
   }
 
@@ -75,19 +82,13 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
   }
 
   void _confirm(List<AccountModel> accounts, List<CategoryModel> categories) async {
-    // If _accountId or _categoryId remains null even though user intended to pick one, enforce it!
-    if (_accountId == null || _categoryId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select Account and Category')));
+    if (_type == 'Transfer' && (_accountId == null || _destinationAccountId == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select From and To Accounts')));
       return;
     }
-
-    // Safety fallback: if somehow the selected ID is not in the fully loaded list 
-    final isAccountValid = accounts.any((a) => a.id == _accountId);
-    final isCategoryValid = categories.any((c) => c.id == _categoryId);
-    
-    if (!isAccountValid || !isCategoryValid) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select valid options from the drop down.')));
-       return;
+    if (_type != 'Transfer' && (_accountId == null || _categoryId == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select Account and Category')));
+      return;
     }
 
     final repo = ref.read(transactionRepositoryProvider);
@@ -98,24 +99,44 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
       newAmount = double.tryParse(_amountCtrl.text) ?? widget.tx.amount;
     }
 
-    // 1. If modifying an ALREADY SUCCESSFUL transaction, we must rollback the old balance first.
+    // 1. Rollback old balance if editing already successful one
     if (widget.tx.status == 'success' && widget.tx.accountId.isNotEmpty) {
       final oldAccount = await accRepo.getAccountById(widget.tx.accountId);
       if (oldAccount != null) {
-        final reversedBal = widget.tx.type == 'Expense'
+        final reversedBal = widget.tx.type == 'Expense' 
             ? oldAccount.balance + widget.tx.amount
-            : oldAccount.balance - widget.tx.amount;
+            : (widget.tx.type == 'Income' 
+                ? oldAccount.balance - widget.tx.amount
+                : oldAccount.balance + widget.tx.amount); // If transfer, source was deducted
         await accRepo.updateAccount(oldAccount.copyWith(balance: reversedBal));
+      }
+      
+      if (widget.tx.type == 'Transfer' && widget.tx.destinationAccountId != null) {
+          final oldDest = await accRepo.getAccountById(widget.tx.destinationAccountId!);
+          if (oldDest != null) {
+             final reversedDestBal = oldDest.balance - widget.tx.amount; // Transfer gave credit
+             await accRepo.updateAccount(oldDest.copyWith(balance: reversedDestBal));
+          }
       }
     }
 
-    // 2. Adjust New Account Balance with potentially new amount
+    // 2. Adjust New Account Balance with new amount
     final account = await accRepo.getAccountById(_accountId!);
     if (account != null) {
-      final newBal = widget.tx.type == 'Expense' 
+      final newBal = _type == 'Expense' 
         ? account.balance - newAmount 
-        : account.balance + newAmount;
+        : (_type == 'Income' 
+           ? account.balance + newAmount
+           : account.balance - newAmount); // For transfer, source is deducted
       await accRepo.updateAccount(account.copyWith(balance: newBal));
+    }
+    
+    if (_type == 'Transfer' && _destinationAccountId != null) {
+      final destAccount = await accRepo.getAccountById(_destinationAccountId!);
+      if (destAccount != null) {
+         final newDestBal = destAccount.balance + newAmount;
+         await accRepo.updateAccount(destAccount.copyWith(balance: newDestBal));
+      }
     }
     
     // 3. Update Transaction Record
@@ -123,7 +144,9 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
       title: _titleCtrl.text,
       amount: newAmount,
       accountId: _accountId,
-      categoryId: _categoryId,
+      categoryId: _type != 'Transfer' ? _categoryId : null,
+      destinationAccountId: _type == 'Transfer' ? _destinationAccountId : null,
+      type: _type,
       timestamp: _selectedTimestamp,
       status: 'success',
     );
@@ -136,23 +159,29 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
     final repo = ref.read(transactionRepositoryProvider);
     final accRepo = ref.read(accountRepositoryProvider);
 
-    // If it's merely a "needs_review" item, deletion is safe.
-    // However, if the user explicitly presses 'Discard' or 'Delete' on an already-confirmed item 
-    // from this dialog, we should reverse balance just like swipe-to-delete.
     if (widget.tx.status == 'success' && widget.tx.accountId.isNotEmpty) {
       final account = await accRepo.getAccountById(widget.tx.accountId);
       if (account != null) {
         final reversedBal = widget.tx.type == 'Expense'
             ? account.balance + widget.tx.amount
-            : account.balance - widget.tx.amount;
+            : (widget.tx.type == 'Income' 
+                ? account.balance - widget.tx.amount
+                : account.balance + widget.tx.amount);
         await accRepo.updateAccount(account.copyWith(balance: reversedBal));
+      }
+      if (widget.tx.type == 'Transfer' && widget.tx.destinationAccountId != null) {
+          final oldDest = await accRepo.getAccountById(widget.tx.destinationAccountId!);
+          if (oldDest != null) {
+             final reversedDestBal = oldDest.balance - widget.tx.amount;
+             await accRepo.updateAccount(oldDest.copyWith(balance: reversedDestBal));
+          }
       }
     }
 
     await repo.deleteTransaction(widget.tx.id);
     
     if (mounted) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Transaction removed for good.')));
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Transaction removed.')));
        context.pop();
     }
   }
@@ -165,19 +194,13 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
     final List<AccountModel> accounts = accountsAsync.hasValue ? accountsAsync.value! : [];
     final List<CategoryModel> categories = categoriesAsync.hasValue ? categoriesAsync.value! : [];
 
-    // Ensure _accountId is actually in the items list, otherwise set to null
-    // This prevents "DropdownButton: There should be exactly one item with [DropdownButton]'s value" exception
-    if (accounts.isNotEmpty && _accountId != null && !accounts.any((a) => a.id == _accountId)) {
-      _accountId = null;
-    }
+    if (accounts.isNotEmpty && _accountId != null && !accounts.any((a) => a.id == _accountId)) _accountId = null;
+    if (categories.isNotEmpty && _categoryId != null && !categories.any((c) => c.id == _categoryId)) _categoryId = null;
+    if (accounts.isNotEmpty && _destinationAccountId != null && !accounts.any((a) => a.id == _destinationAccountId)) _destinationAccountId = null;
 
-    if (categories.isNotEmpty && _categoryId != null && !categories.any((c) => c.id == _categoryId)) {
-      _categoryId = null;
-    }
-
-    final String accountLabel = widget.tx.type == 'Income' 
-        ? 'Credited To (Account)' 
-        : 'Debit From (Account)';
+    final String accountLabel = _type == 'Income' 
+        ? 'Credited To' 
+        : (_type == 'Expense' ? 'Debit From' : 'Transfer From');
 
     return AlertDialog(
       title: Text(widget.tx.status == 'needs_review' ? 'Review Payment' : 'Edit Transaction'),
@@ -186,6 +209,16 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'Expense', label: Text('Exp'), icon: Icon(Icons.arrow_upward)),
+                ButtonSegment(value: 'Transfer', label: Text('Txr'), icon: Icon(Icons.swap_horiz)),
+                ButtonSegment(value: 'Income', label: Text('Inc'), icon: Icon(Icons.arrow_downward)),
+              ],
+              selected: {_type},
+              onSelectionChanged: (set) => setState(() => _type = set.first),
+            ),
+            const SizedBox(height: 16),
             if (_isManual)
               TextField(
                 controller: _amountCtrl,
@@ -226,16 +259,27 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
               items: accounts.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
               onChanged: (v) => setState(() => _accountId = v),
               decoration: InputDecoration(labelText: accountLabel),
-              hint: accountsAsync.isLoading ? const Text('Loading accounts...') : null,
+              hint: accountsAsync.isLoading ? const Text('Loading...') : null,
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _categoryId,
-              items: categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-              onChanged: (v) => setState(() => _categoryId = v),
-              decoration: const InputDecoration(labelText: 'Category'),
-              hint: categoriesAsync.isLoading ? const Text('Loading categories...') : null,
-            ),
+            
+            if (_type != 'Transfer')
+              DropdownButtonFormField<String>(
+                value: _categoryId,
+                items: categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+                onChanged: (v) => setState(() => _categoryId = v),
+                decoration: const InputDecoration(labelText: 'Category'),
+                hint: categoriesAsync.isLoading ? const Text('Loading...') : null,
+              ),
+              
+            if (_type == 'Transfer')
+              DropdownButtonFormField<String>(
+                value: _destinationAccountId,
+                items: accounts.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
+                onChanged: (v) => setState(() => _destinationAccountId = v),
+                decoration: const InputDecoration(labelText: 'Transfer To (Account)'),
+                hint: accountsAsync.isLoading ? const Text('Loading accounts...') : null,
+              ),
           ],
         ),
       ),

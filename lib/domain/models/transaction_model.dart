@@ -34,6 +34,9 @@ class TransactionModel extends HiveObject {
   @HiveField(9)
   final String? rawNotificationText; // For debugging and matching logic
 
+  @HiveField(10)
+  final String? destinationAccountId; // Only used when type is 'Transfer'
+
   TransactionModel({
     required this.id,
     required this.amount,
@@ -42,6 +45,7 @@ class TransactionModel extends HiveObject {
     required this.type,
     required this.accountId,
     this.categoryId,
+    this.destinationAccountId,
     this.description,
     this.status = 'success',
     this.rawNotificationText,
@@ -55,6 +59,7 @@ class TransactionModel extends HiveObject {
     String? type,
     String? accountId,
     String? categoryId,
+    String? destinationAccountId,
     String? description,
     String? status,
     String? rawNotificationText,
@@ -67,6 +72,7 @@ class TransactionModel extends HiveObject {
       type: type ?? this.type,
       accountId: accountId ?? this.accountId,
       categoryId: categoryId ?? this.categoryId,
+      destinationAccountId: destinationAccountId ?? this.destinationAccountId,
       description: description ?? this.description,
       status: status ?? this.status,
       rawNotificationText: rawNotificationText ?? this.rawNotificationText,

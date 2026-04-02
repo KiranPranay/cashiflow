@@ -148,7 +148,10 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                 }
 
                 if (_selectedAccountId != null) {
-                  filteredTxs = filteredTxs.where((t) => t.accountId == _selectedAccountId).toList();
+                  filteredTxs = filteredTxs.where((t) => 
+                     t.accountId == _selectedAccountId || 
+                     (t.type == 'Transfer' && t.destinationAccountId == _selectedAccountId)
+                  ).toList();
                 }
 
                 if (_selectedCategoryId != null) {
@@ -179,23 +182,27 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       leading: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: tx.type == 'Expense' 
-                            ? Theme.of(context).colorScheme.errorContainer 
-                            : Theme.of(context).colorScheme.primaryContainer,
+                          color: tx.type == 'Transfer'
+                            ? Theme.of(context).colorScheme.secondaryContainer
+                            : (tx.type == 'Expense' 
+                                ? Theme.of(context).colorScheme.errorContainer 
+                                : Theme.of(context).colorScheme.primaryContainer),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          tx.type == 'Expense' ? Icons.call_made_rounded : Icons.call_received_rounded,
-                          color: tx.type == 'Expense' 
-                            ? Theme.of(context).colorScheme.onErrorContainer 
-                            : Theme.of(context).colorScheme.onPrimaryContainer,
+                          tx.type == 'Transfer' ? Icons.swap_horiz : (tx.type == 'Expense' ? Icons.call_made_rounded : Icons.call_received_rounded),
+                          color: tx.type == 'Transfer'
+                            ? Theme.of(context).colorScheme.onSecondaryContainer
+                            : (tx.type == 'Expense' 
+                                ? Theme.of(context).colorScheme.onErrorContainer 
+                                : Theme.of(context).colorScheme.onPrimaryContainer),
                           size: 20,
                         ),
                       ),
                       title: Text(tx.title.isNotEmpty ? tx.title : 'Payment', 
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       subtitle: Text(
-                        '${tx.timestamp.day}/${tx.timestamp.month}/${tx.timestamp.year} • ${TimeOfDay.fromDateTime(tx.timestamp).format(context)}',
+                        '${tx.timestamp.day}/${tx.timestamp.month}/${tx.timestamp.year} • ${TimeOfDay.fromDateTime(tx.timestamp).format(context)} • ${tx.type}',
                         style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
                       ),
                       trailing: Text(
@@ -203,7 +210,9 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 16,
-                          color: tx.type == 'Expense' ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.primary,
+                          color: tx.type == 'Transfer' 
+                            ? Theme.of(context).colorScheme.onSurface
+                            : (tx.type == 'Expense' ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.primary),
                         ),
                       ),
                     );
