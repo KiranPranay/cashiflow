@@ -312,7 +312,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               Text(acc.name, style: const TextStyle(fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
               const SizedBox(height: 4),
               Text(
-                '₹${acc.balance.abs().toStringAsFixed(0)}', 
+                '${acc.balance < 0 ? '-' : ''}₹${acc.balance.abs().toStringAsFixed(0)}', 
                 style: TextStyle(
                   fontWeight: FontWeight.w800, 
                   fontSize: 18,
@@ -446,8 +446,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   }
                   
                   if (context.mounted) {
+                    ScaffoldMessenger.of(context).clearSnackBars();
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Transaction deleted')),
+                      SnackBar(
+                        content: const Text('Transaction deleted'),
+                        duration: const Duration(seconds: 5),
+                        action: SnackBarAction(
+                          label: 'Undo',
+                          onPressed: () async {
+                            // Re-add transaction
+                            await repo.addTransaction(tx);
+                            
+                            // Re-apply impact on account
+                            if (tx.accountId.isNotEmpty) {
+                              final currentAcc = await accRepo.getAccountById(tx.accountId);
+                              if (currentAcc != null) {
+                                final originalBal = tx.type == 'Expense'
+                                  ? currentAcc.balance - tx.amount
+                                  : currentAcc.balance + tx.amount;
+                                await accRepo.updateAccount(currentAcc.copyWith(balance: originalBal));
+                              }
+                            }
+                          },
+                        ),
+                      ),
                     );
                   }
                 },
@@ -489,7 +511,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     title: Text(tx.title.isNotEmpty ? tx.title : 'Payment', 
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     subtitle: Text(
-                      '${tx.timestamp.day}/${tx.timestamp.month} • ${tx.type}',
+                      '${tx.timestamp.day}/${tx.timestamp.month} • ${TimeOfDay.fromDateTime(tx.timestamp).format(context)} • ${tx.type}',
                       style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
                     ),
                     trailing: Text(

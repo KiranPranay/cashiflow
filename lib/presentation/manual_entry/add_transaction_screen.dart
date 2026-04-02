@@ -23,7 +23,46 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   String _type = 'Expense';
   String? _accountId;
   String? _categoryId;
+  late DateTime _selectedDate;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = DateTime.now();
+  }
+
+  Future<void> _pickDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (date != null) {
+      setState(() {
+        _selectedDate = DateTime(
+          date.year, date.month, date.day,
+          _selectedDate.hour, _selectedDate.minute,
+        );
+      });
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_selectedDate),
+    );
+    if (time != null) {
+      setState(() {
+        _selectedDate = DateTime(
+          _selectedDate.year, _selectedDate.month, _selectedDate.day,
+          time.hour, time.minute,
+        );
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -46,7 +85,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       final tx = TransactionModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         amount: amt,
-        timestamp: DateTime.now(),
+        timestamp: _selectedDate,
         title: _titleCtrl.text,
         type: _type,
         accountId: _accountId!,
@@ -108,6 +147,26 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               ],
               selected: {_type},
               onSelectionChanged: (set) => setState(() => _type = set.first),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickDate,
+                    icon: const Icon(Icons.calendar_today, size: 18),
+                    label: Text('${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickTime,
+                    icon: const Icon(Icons.access_time, size: 18),
+                    label: Text(TimeOfDay.fromDateTime(_selectedDate).format(context)),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 24),
             TextField(

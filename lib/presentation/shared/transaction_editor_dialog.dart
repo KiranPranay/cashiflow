@@ -19,13 +19,19 @@ class TransactionEditorDialog extends ConsumerStatefulWidget {
 
 class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialog> {
   late TextEditingController _titleCtrl;
+  late TextEditingController _amountCtrl;
   String? _accountId;
   String? _categoryId;
+  late DateTime _selectedTimestamp;
+
+  bool get _isManual => widget.tx.rawNotificationText == null || widget.tx.rawNotificationText!.isEmpty;
 
   @override
   void initState() {
     super.initState();
     _titleCtrl = TextEditingController(text: widget.tx.title);
+    _amountCtrl = TextEditingController(text: widget.tx.amount.toStringAsFixed(2));
+    _selectedTimestamp = widget.tx.timestamp;
     
     if (widget.tx.accountId.isNotEmpty) {
       _accountId = widget.tx.accountId;
@@ -33,6 +39,38 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
     
     if (widget.tx.categoryId != null && widget.tx.categoryId!.isNotEmpty) {
       _categoryId = widget.tx.categoryId;
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedTimestamp,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (date != null) {
+      setState(() {
+        _selectedTimestamp = DateTime(
+          date.year, date.month, date.day,
+          _selectedTimestamp.hour, _selectedTimestamp.minute,
+        );
+      });
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_selectedTimestamp),
+    );
+    if (time != null) {
+      setState(() {
+        _selectedTimestamp = DateTime(
+          _selectedTimestamp.year, _selectedTimestamp.month, _selectedTimestamp.day,
+          time.hour, time.minute,
+        );
+      });
     }
   }
 
@@ -55,6 +93,11 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
     final repo = ref.read(transactionRepositoryProvider);
     final accRepo = ref.read(accountRepositoryProvider);
 
+    double newAmount = widget.tx.amount;
+    if (_isManual) {
+      newAmount = double.tryParse(_amountCtrl.text) ?? widget.tx.amount;
+    }
+
     // 1. If modifying an ALREADY SUCCESSFUL transaction, we must rollback the old balance first.
     if (widget.tx.status == 'success' && widget.tx.accountId.isNotEmpty) {
       final oldAccount = await accRepo.getAccountById(widget.tx.accountId);
@@ -66,20 +109,22 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
       }
     }
 
-    // 2. Adjust New Account Balance
+    // 2. Adjust New Account Balance with potentially new amount
     final account = await accRepo.getAccountById(_accountId!);
     if (account != null) {
       final newBal = widget.tx.type == 'Expense' 
-        ? account.balance - widget.tx.amount 
-        : account.balance + widget.tx.amount;
+        ? account.balance - newAmount 
+        : account.balance + newAmount;
       await accRepo.updateAccount(account.copyWith(balance: newBal));
     }
     
     // 3. Update Transaction Record
     final updatedTx = widget.tx.copyWith(
       title: _titleCtrl.text,
+      amount: newAmount,
       accountId: _accountId,
       categoryId: _categoryId,
+      timestamp: _selectedTimestamp,
       status: 'success',
     );
     await repo.updateTransaction(updatedTx);
@@ -141,7 +186,35 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('₹${widget.tx.amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+            if (_isManual)
+              TextField(
+                controller: _amountCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                decoration: const InputDecoration(prefixText: '₹ ', border: InputBorder.none),
+              )
+            else
+              Text('₹${widget.tx.amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickDate,
+                    icon: const Icon(Icons.calendar_today, size: 18),
+                    label: Text('${_selectedTimestamp.day}/${_selectedTimestamp.month}/${_selectedTimestamp.year}'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickTime,
+                    icon: const Icon(Icons.access_time, size: 18),
+                    label: Text(TimeOfDay.fromDateTime(_selectedTimestamp).format(context)),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: _titleCtrl,

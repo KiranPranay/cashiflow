@@ -1,5 +1,6 @@
 import 'package:cashi_flow/presentation/analytics/analytics_screen.dart';
 import 'package:cashi_flow/presentation/dashboard/dashboard_screen.dart';
+import 'package:cashi_flow/presentation/transactions/transactions_screen.dart';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -46,6 +47,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/analytics',
             builder: (context, state) => const AnalyticsScreen(),
           ),
+          GoRoute(
+            path: '/transactions',
+            builder: (context, state) => const TransactionsScreen(),
+          ),
         ],
       ),
 
@@ -83,7 +88,11 @@ class AppScaffold extends StatelessWidget {
     final GoRouterState state = GoRouterState.of(context);
     final String location = state.uri.toString();
     
-    int currentIndex = location == '/' ? 0 : 1;
+    int currentIndex = 0;
+    if (location == '/') currentIndex = 0;
+    if (location == '/transactions') currentIndex = 1;
+    if (location == '/analytics') currentIndex = 2;
+    if (location == '/settings') currentIndex = 3;
 
     return Scaffold(
       body: child,
@@ -107,19 +116,19 @@ class AppScaffold extends StatelessWidget {
               onTap: () => context.go('/'),
             ),
             _NavBarIcon(
-              icon: Icons.calendar_today_rounded,
-              isSelected: false,
-              onTap: () {}, // Placeholder for future calendar route
+              icon: Icons.receipt_long_rounded,
+              isSelected: currentIndex == 1,
+              onTap: () => context.go('/transactions'),
             ),
             const SizedBox(width: 48), // Space for the notched FAB
             _NavBarIcon(
               icon: Icons.account_balance_wallet_rounded,
-              isSelected: currentIndex == 1,
+              isSelected: currentIndex == 2,
               onTap: () => context.go('/analytics'),
             ),
             _NavBarIcon(
               icon: Icons.person_outline_rounded,
-              isSelected: false,
+              isSelected: currentIndex == 3,
               onTap: () => context.push('/settings'),
             ),
           ],
