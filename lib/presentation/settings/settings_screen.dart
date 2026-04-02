@@ -5,6 +5,7 @@ import 'package:hive/hive.dart';
 import 'package:cashi_flow/domain/models/account_model.dart';
 import 'package:cashi_flow/domain/models/category_model.dart';
 import 'package:cashi_flow/domain/models/user_settings_model.dart';
+import 'package:cashi_flow/domain/models/transaction_model.dart';
 import 'package:cashi_flow/domain/providers/user_settings_providers.dart';
 import 'package:cashi_flow/domain/providers/account_providers.dart';
 import 'package:cashi_flow/domain/providers/category_providers.dart';
@@ -382,10 +383,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
 
     if (confirmed == true) {
-      await Hive.box('transactions_v2').clear();
-      await Hive.box('accounts').clear();
-      await Hive.box('categories').clear();
-      await Hive.box('user_settings').clear();
+      await Hive.box<TransactionModel>('transactions_v2').clear();
+      await Hive.box<AccountModel>('accounts').clear();
+      await Hive.box<CategoryModel>('categories').clear();
+      await Hive.box<UserSettingsModel>('user_settings').clear();
       if (context.mounted) {
         context.go('/onboarding');
       }
