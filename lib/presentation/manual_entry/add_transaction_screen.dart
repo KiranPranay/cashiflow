@@ -19,6 +19,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   final _amountCtrl = TextEditingController();
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
+  final _refCtrl = TextEditingController();
 
   String _type = 'Expense';
   String? _accountId;
@@ -70,6 +71,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     _amountCtrl.dispose();
     _titleCtrl.dispose();
     _descCtrl.dispose();
+    _refCtrl.dispose();
     super.dispose();
   }
 
@@ -100,6 +102,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         accountId: _accountId!,
         categoryId: _type != 'Transfer' ? _categoryId : null,
         destinationAccountId: _type == 'Transfer' ? _destinationAccountId : null,
+        referenceNumber: _refCtrl.text.isEmpty ? null : _refCtrl.text,
         description: _descCtrl.text,
         status: isPending ? 'pending' : 'success', 
       );
@@ -250,6 +253,11 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               controller: _descCtrl,
               decoration: const InputDecoration(labelText: 'Notes (Optional)', prefixIcon: Icon(Icons.note)),
               maxLines: 2,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _refCtrl,
+              decoration: const InputDecoration(labelText: 'Reference Code (Optional)', prefixIcon: Icon(Icons.numbers)),
             ),
             const SizedBox(height: 32),
             Row(

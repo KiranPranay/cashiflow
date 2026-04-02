@@ -201,9 +201,19 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       ),
                       title: Text(tx.title.isNotEmpty ? tx.title : 'Payment', 
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      subtitle: Text(
-                        '${tx.timestamp.day}/${tx.timestamp.month}/${tx.timestamp.year} • ${TimeOfDay.fromDateTime(tx.timestamp).format(context)} • ${tx.type}',
-                        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${tx.timestamp.day}/${tx.timestamp.month}/${tx.timestamp.year} • ${TimeOfDay.fromDateTime(tx.timestamp).format(context)} • ${tx.type}',
+                            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                          ),
+                          if (tx.referenceNumber != null && tx.referenceNumber!.isNotEmpty)
+                            Text(
+                              'Ref: ${tx.referenceNumber}',
+                              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                            ),
+                        ],
                       ),
                       trailing: Text(
                         '₹${tx.amount.toStringAsFixed(0)}',

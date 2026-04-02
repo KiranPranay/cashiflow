@@ -20,6 +20,7 @@ class TransactionEditorDialog extends ConsumerStatefulWidget {
 class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialog> {
   late TextEditingController _titleCtrl;
   late TextEditingController _amountCtrl;
+  late TextEditingController _refCtrl;
   String? _accountId;
   String? _categoryId;
   String? _destinationAccountId;
@@ -33,6 +34,7 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
     super.initState();
     _titleCtrl = TextEditingController(text: widget.tx.title);
     _amountCtrl = TextEditingController(text: widget.tx.amount.toStringAsFixed(2));
+    _refCtrl = TextEditingController(text: widget.tx.referenceNumber ?? '');
     _selectedTimestamp = widget.tx.timestamp;
     _type = widget.tx.type;
     
@@ -146,6 +148,7 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
       accountId: _accountId,
       categoryId: _type != 'Transfer' ? _categoryId : null,
       destinationAccountId: _type == 'Transfer' ? _destinationAccountId : null,
+      referenceNumber: _refCtrl.text.isEmpty ? null : _refCtrl.text,
       type: _type,
       timestamp: _selectedTimestamp,
       status: 'success',
@@ -252,6 +255,11 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
             TextField(
               controller: _titleCtrl,
               decoration: const InputDecoration(labelText: 'Payee / Title'),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _refCtrl,
+              decoration: const InputDecoration(labelText: 'Reference Code (Optional)', prefixIcon: Icon(Icons.numbers)),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(

@@ -113,6 +113,7 @@ class NotificationService {
     String parsedType = 'Expense';
     String parsedAccountId = 'unknown';
     String parsedCategoryId = 'unknown';
+    String? parsedReference;
 
     final settings = await _settingsRepo.watchSettings().first;
     final geminiKey = settings?.geminiApiKey;
@@ -139,11 +140,12 @@ Available Accounts:
 Available Categories:
 [\n$categoriesListStr\n]
 
-Schema: {"amount": double, "payee": "string", "type": "Expense" | "Income", "accountId": "string", "categoryId": "string"}
+Schema: {"amount": double, "payee": "string", "type": "Expense" | "Income", "accountId": "string", "categoryId": "string", "referenceNumber": "string"}
 - For "type", determine if money was deducted ("Expense") or credited ("Income").
 - For "accountId", choose the BEST matching account id from Available Accounts. If unsure or not in the list, use specifically the string "unknown".
 - For "categoryId", choose the BEST matching category id from Available Categories. If unsure or not in the list, use specifically the string "unknown".
 - For "payee", string representing the recipient or sender.
+- For "referenceNumber", extract any specific transaction tracking code, UTR, or UPI Ref number. If completely absent, provide empty string "".
 
 Notification Title: $rawTitle
 Notification Text: $rawText
@@ -162,6 +164,9 @@ Notification Text: $rawText
         }
         if (jsonMap.containsKey('accountId')) parsedAccountId = jsonMap['accountId'].toString();
         if (jsonMap.containsKey('categoryId')) parsedCategoryId = jsonMap['categoryId'].toString();
+        if (jsonMap.containsKey('referenceNumber') && jsonMap['referenceNumber'].toString().isNotEmpty) {
+           parsedReference = jsonMap['referenceNumber'].toString();
+        }
       } catch (e) {
         print("Gemini Parsing Failed: $e");
         return false; 
@@ -184,6 +189,14 @@ Notification Text: $rawText
       parsedCategoryId = unkCat.id;
     }
 
+    if (parsedReference != null && parsedReference.isNotEmpty) {
+      final existingTx = await _repo.findByReferenceNumber(parsedReference);
+      if (existingTx != null) {
+         print("Duplicate Catch! Transaction matched existing Ref NO: $parsedReference");
+         return true; // we return true so the queue marks it synced/cleared correctly without injecting duplicates.
+      }
+    }
+
     final pending = await _repo.findPendingByAmount(parsedAmount);
 
     if (pending != null) {
@@ -194,6 +207,7 @@ Notification Text: $rawText
         type: parsedType != 'Expense' && parsedType != 'Income' ? pending.type : parsedType,
         accountId: parsedAccountId != 'unknown' ? parsedAccountId : pending.accountId,
         categoryId: parsedCategoryId != 'unknown' ? parsedCategoryId : pending.categoryId,
+        referenceNumber: parsedReference ?? pending.referenceNumber,
       );
       await _repo.updateTransaction(confirmed);
 
@@ -214,6 +228,7 @@ Notification Text: $rawText
         type: parsedType,
         accountId: parsedAccountId, 
         categoryId: parsedCategoryId,
+        referenceNumber: parsedReference,
         status: 'needs_review',
         rawNotificationText: "$rawTitle : $rawText",
       );

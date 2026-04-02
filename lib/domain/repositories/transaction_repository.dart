@@ -8,4 +8,5 @@ abstract class TransactionRepository {
   Future<void> clearTransactions();
   Stream<List<TransactionModel>> watchTransactions();
   Future<TransactionModel?> findPendingByAmount(double amount, {Duration window = const Duration(minutes: 5)});
+  Future<TransactionModel?> findByReferenceNumber(String refNo);
 }

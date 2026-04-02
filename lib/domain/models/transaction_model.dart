@@ -37,6 +37,9 @@ class TransactionModel extends HiveObject {
   @HiveField(10)
   final String? destinationAccountId; // Only used when type is 'Transfer'
 
+  @HiveField(11)
+  final String? referenceNumber; // e.g. UTR, UPI Ref, receipt number
+
   TransactionModel({
     required this.id,
     required this.amount,
@@ -46,6 +49,7 @@ class TransactionModel extends HiveObject {
     required this.accountId,
     this.categoryId,
     this.destinationAccountId,
+    this.referenceNumber,
     this.description,
     this.status = 'success',
     this.rawNotificationText,
@@ -60,6 +64,7 @@ class TransactionModel extends HiveObject {
     String? accountId,
     String? categoryId,
     String? destinationAccountId,
+    String? referenceNumber,
     String? description,
     String? status,
     String? rawNotificationText,
@@ -73,6 +78,7 @@ class TransactionModel extends HiveObject {
       accountId: accountId ?? this.accountId,
       categoryId: categoryId ?? this.categoryId,
       destinationAccountId: destinationAccountId ?? this.destinationAccountId,
+      referenceNumber: referenceNumber ?? this.referenceNumber,
       description: description ?? this.description,
       status: status ?? this.status,
       rawNotificationText: rawNotificationText ?? this.rawNotificationText,

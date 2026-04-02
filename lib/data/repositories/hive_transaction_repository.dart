@@ -62,4 +62,14 @@ class HiveTransactionRepository implements TransactionRepository {
       return null;
     }
   }
+
+  @override
+  Future<TransactionModel?> findByReferenceNumber(String refNo) async {
+    try {
+      if (refNo.trim().isEmpty) return null;
+      return _transactionBox.values.firstWhere((tx) => tx.referenceNumber?.toLowerCase() == refNo.trim().toLowerCase());
+    } catch (_) {
+      return null;
+    }
+  }
 }
