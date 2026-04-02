@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:go_router/go_router.dart';
 import 'package:cashi_flow/domain/providers/transaction_providers.dart';
 import 'package:cashi_flow/domain/models/transaction_model.dart';
 import 'dart:math';
@@ -215,91 +214,36 @@ class AnalyticsScreen extends ConsumerWidget {
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
                   ),
                   padding: const EdgeInsets.fromLTRB(24, 32, 24, 8),
-                  child: const Text('Your Activity', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
+                  child: const Text('Advanced Charts', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
                 ),
               ],
             ),
           ),
         ),
 
-        // Activity List cleanly unconstrained
+        // Chart TODO Placeholder
         SliverPadding(
-          padding: const EdgeInsets.only(bottom: 120),
-          sliver: _buildRecentTransactionsList(context, transactions),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRecentTransactionsList(BuildContext context, List<TransactionModel> txs) {
-    final recent = txs.where((t) => t.status != 'needs_review').toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-    if (recent.isEmpty) {
-      return const SliverToBoxAdapter(
-        child: Padding(
-          padding: EdgeInsets.all(32.0),
-          child: Center(child: Text('No transactions yet.', style: TextStyle(color: Colors.grey))),
-        ),
-      );
-    }
-
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          final tx = recent[index];
-          return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                )
-              ]
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              leading: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(
-                  tx.type == 'Expense' ? Icons.shopping_bag_rounded : Icons.account_balance_rounded,
-                  color: Theme.of(context).colorScheme.onSecondaryContainer,
-                ),
+          padding: const EdgeInsets.only(bottom: 120, left: 24, right: 24),
+          sliver: SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(24),
               ),
-              title: Text(tx.title.isNotEmpty ? tx.title : 'Payment', 
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              subtitle: Text(
-                '${tx.timestamp.day} ${_getMonthName(tx.timestamp.month)} ${tx.timestamp.year}',
-                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-              ),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
+              child: const Column(
                 children: [
-                  Text(
-                    '₹${tx.amount.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                      color: tx.type == 'Expense' ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  Text(tx.type, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                  Icon(Icons.pie_chart_outline, size: 48, color: Colors.grey),
+                  SizedBox(height: 16),
+                  Text('More Analysis Coming Soon', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  SizedBox(height: 8),
+                  Text('TODO: Granular category breakdowns, custom date spans, and merchant heatmaps will be mapped here.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
                 ],
               ),
             ),
-          );
-        },
-        childCount: min(15, recent.length),
-      ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -315,11 +259,6 @@ class AnalyticsScreen extends ConsumerWidget {
 
   String _getMonthNameShort(int month) {
     const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return names[month - 1];
-  }
-  
-  String _getMonthName(int month) {
-    const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     return names[month - 1];
   }
 }

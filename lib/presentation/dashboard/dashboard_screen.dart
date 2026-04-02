@@ -37,17 +37,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               backgroundColor: Colors.transparent,
               elevation: 0,
               pinned: true,
-              leading: IconButton(
-                icon: const Icon(Icons.grid_view_rounded),
-                onPressed: () {},
-              ),
               title: const Text('Dashboard', 
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
               centerTitle: true,
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.settings_outlined),
-                  onPressed: () => context.push('/settings'),
+                  icon: const Icon(Icons.notifications_outlined),
+                  onPressed: () => context.push('/inbox'),
                 ),
               ],
             ),
@@ -155,40 +151,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       letterSpacing: -1.0,
                     )),
                   const SizedBox(height: 48),
-                  const Text('See details', 
-                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                  GestureDetector(
+                    onTap: () => context.push('/transactions'),
+                    child: const Text('See details', 
+                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
             
-            // Budget Pill
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Budget for this month', 
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w600, fontSize: 14)),
-                      const SizedBox(height: 4),
-                      Text('Cash Available', 
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 12)),
-                    ],
-                  ),
-                  Text('₹${(netWorth - currentMonthExpenses).clamp(0, double.infinity).toStringAsFixed(0)}', 
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 24, fontWeight: FontWeight.w800)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
+
 
             // Cash Grid (Income / Expense)
             Row(
