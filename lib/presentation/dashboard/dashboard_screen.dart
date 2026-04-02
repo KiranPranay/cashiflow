@@ -8,6 +8,7 @@ import 'package:cashi_flow/domain/providers/account_providers.dart';
 import 'package:cashi_flow/domain/providers/transaction_providers.dart';
 import 'package:cashi_flow/domain/providers/user_settings_providers.dart';
 import 'package:cashi_flow/data/services/notification_service.dart';
+import 'package:cashi_flow/presentation/shared/transaction_editor_dialog.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -413,49 +414,91 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           delegate: SliverChildBuilderDelegate(
             (context, index) {
               final tx = recent[index];
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerLowest,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.03),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    )
-                  ]
+              return Dismissible(
+                key: Key(tx.id),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.error,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.onError),
                 ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                  leading: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: tx.type == 'Expense' 
-                        ? Theme.of(context).colorScheme.errorContainer 
-                        : Theme.of(context).colorScheme.primaryContainer,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      tx.type == 'Expense' ? Icons.call_made_rounded : Icons.call_received_rounded,
-                      color: tx.type == 'Expense' 
-                        ? Theme.of(context).colorScheme.onErrorContainer 
-                        : Theme.of(context).colorScheme.onPrimaryContainer,
-                      size: 20,
-                    ),
+                onDismissed: (_) async {
+                  final repo = ref.read(transactionRepositoryProvider);
+                  final accRepo = ref.read(accountRepositoryProvider);
+                  
+                  // Delete transaction
+                  await repo.deleteTransaction(tx.id);
+                  
+                  // Reverse impact on account
+                  if (tx.accountId.isNotEmpty) {
+                    final account = await accRepo.getAccountById(tx.accountId);
+                    if (account != null) {
+                      final newBal = tx.type == 'Expense'
+                        ? account.balance + tx.amount
+                        : account.balance - tx.amount;
+                      await accRepo.updateAccount(account.copyWith(balance: newBal));
+                    }
+                  }
+                  
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Transaction deleted')),
+                    );
+                  }
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerLowest,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      )
+                    ]
                   ),
-                  title: Text(tx.title.isNotEmpty ? tx.title : 'Payment', 
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  subtitle: Text(
-                    '${tx.timestamp.day}/${tx.timestamp.month} • ${tx.type}',
-                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-                  ),
-                  trailing: Text(
-                    '₹${tx.amount.toStringAsFixed(0)}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                      color: tx.type == 'Expense' ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.primary,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                    onTap: () => showDialog(
+                      context: context, 
+                      builder: (ctx) => TransactionEditorDialog(tx: tx)
+                    ),
+                    leading: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: tx.type == 'Expense' 
+                          ? Theme.of(context).colorScheme.errorContainer 
+                          : Theme.of(context).colorScheme.primaryContainer,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        tx.type == 'Expense' ? Icons.call_made_rounded : Icons.call_received_rounded,
+                        color: tx.type == 'Expense' 
+                          ? Theme.of(context).colorScheme.onErrorContainer 
+                          : Theme.of(context).colorScheme.onPrimaryContainer,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(tx.title.isNotEmpty ? tx.title : 'Payment', 
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    subtitle: Text(
+                      '${tx.timestamp.day}/${tx.timestamp.month} • ${tx.type}',
+                      style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                    ),
+                    trailing: Text(
+                      '₹${tx.amount.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        color: tx.type == 'Expense' ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                   ),
                 ),

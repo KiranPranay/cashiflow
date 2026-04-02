@@ -4,11 +4,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:cashi_flow/domain/models/transaction_model.dart';
+import 'package:cashi_flow/domain/models/account_model.dart';
+import 'package:cashi_flow/domain/models/category_model.dart';
 import 'package:cashi_flow/domain/repositories/transaction_repository.dart';
 import 'package:cashi_flow/domain/repositories/account_repository.dart';
+import 'package:cashi_flow/domain/repositories/category_repository.dart';
 import 'package:cashi_flow/domain/repositories/user_settings_repository.dart';
 import 'package:cashi_flow/domain/providers/transaction_providers.dart';
 import 'package:cashi_flow/domain/providers/account_providers.dart';
+import 'package:cashi_flow/domain/providers/category_providers.dart';
 import 'package:cashi_flow/domain/providers/user_settings_providers.dart';
 
 const _upiChannel = MethodChannel('com.cashi_flow/upi');
@@ -17,23 +21,20 @@ const _notifChannel = EventChannel('com.cashi_flow/notifications');
 class NotificationService {
   final TransactionRepository _repo;
   final AccountRepository _accountRepo;
+  final CategoryRepository _categoryRepo;
   final UserSettingsRepository _settingsRepo;
   StreamSubscription? _subscription;
   bool _isProcessingQueue = false;
 
-  NotificationService(this._repo, this._accountRepo, this._settingsRepo);
+  NotificationService(this._repo, this._accountRepo, this._categoryRepo, this._settingsRepo);
 
   void startListening() {
-    // 1. Fire up the offline queue syncer immediately on boot
     _syncOfflineQueue();
-
-    // 2. Listen to live events if the app happens to be open
     _subscription?.cancel();
     _subscription = _notifChannel.receiveBroadcastStream().listen(
       (event) async {
         if (event is Map) {
           final data = event.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
-          // Add to processing loop rather than concurrent executing to prevent race conditions
           await _processSingleNotification(data);
         }
       },
@@ -60,16 +61,13 @@ class NotificationService {
             final data = rawItem.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
             final messageId = data['messageId'];
             
-            // Process sequentially to prevent Gemini Rate Limits (HTTP 429)
             final success = await _processSingleNotification(data);
             
-            // If processing was purely successful (AI parsed, Hive saved), tell Android to nuke it from SharedPreferences
             if (success && messageId != null) {
                await _upiChannel.invokeMethod('removeQueuedNotification', {'id': messageId});
                print("Removed synced notification $messageId from Native Queue.");
             }
             
-            // Respect API limits
             await Future.delayed(const Duration(seconds: 2));
           }
         }
@@ -81,8 +79,28 @@ class NotificationService {
     }
   }
 
-  /// Returns true if the notification was completely processed and stored in the ledger.
-  /// Returns false if it failed due to Gemini Exception (no internet) so the Queue keeps it.
+  Future<AccountModel> _getOrCreateUnknownAccount() async {
+    final accounts = await _accountRepo.watchAccounts().first;
+    try {
+      return accounts.firstWhere((a) => a.id == 'unknown_bank' || a.name == 'Unknown Bank');
+    } catch (_) {
+      final unknown = AccountModel(id: 'unknown_bank', name: 'Unknown Bank', balance: 0, type: 'Bank');
+      await _accountRepo.addAccount(unknown);
+      return unknown;
+    }
+  }
+
+  Future<CategoryModel> _getOrCreateUnknownCategory() async {
+    final categories = await _categoryRepo.watchCategories().first;
+    try {
+      return categories.firstWhere((c) => c.id == 'unknown_category' || c.name == 'Unknown Category');
+    } catch (_) {
+      final unknown = CategoryModel(id: 'unknown_category', name: 'Unknown Category', type: 'Expense', iconName: 'help_outline', colorHex: 0xFF9E9E9E);
+      await _categoryRepo.addCategory(unknown);
+      return unknown;
+    }
+  }
+
   Future<bool> _processSingleNotification(Map<String, String> data) async {
     final rawTitle = data['rawTitle'] ?? '';
     final rawText = data['rawText'] ?? '';
@@ -90,27 +108,43 @@ class NotificationService {
     final fallbackPayee = data['payee'] ?? 'Unknown Payment';
     final messageId = data['messageId'];
 
-    // If we've already synced this transaction via a previous pass or live-stream, 
-    // it will have a matching rawText signature in Hive. We can do a quick de-dupe guard.
-    // However, SharedPreferences removal mitigates this natively.
-
     double? parsedAmount;
     String parsedPayee = fallbackPayee;
+    String parsedType = 'Expense';
+    String parsedAccountId = 'unknown';
+    String parsedCategoryId = 'unknown';
 
-    // 1. Check for Gemini Key and Attempt AI Parsing
     final settings = await _settingsRepo.watchSettings().first;
     final geminiKey = settings?.geminiApiKey;
 
     if (geminiKey != null && geminiKey.isNotEmpty) {
       try {
+        final accounts = await _accountRepo.watchAccounts().first;
+        final categories = await _categoryRepo.watchCategories().first;
+        
+        final accountsListStr = accounts.map((a) => '{"id": "${a.id}", "name": "${a.name}"}').join(',\\n');
+        final categoriesListStr = categories.map((c) => '{"id": "${c.id}", "name": "${c.name}"}').join(',\\n');
+
         final model = GenerativeModel(
           model: 'gemini-2.5-flash',
           apiKey: geminiKey,
         );
         final prompt = '''
-You are a banking notification parser. Extract the payment amount and payee exactly from the following notification text. 
+You are a banking notification parser. Extract details strictly from the following notification text. 
 Return ONLY a strictly valid JSON object. No markdown. No backticks.
-Schema: {"amount": double, "payee": "string"}
+
+Available Accounts:
+[\n$accountsListStr\n]
+
+Available Categories:
+[\n$categoriesListStr\n]
+
+Schema: {"amount": double, "payee": "string", "type": "Expense" | "Income", "accountId": "string", "categoryId": "string"}
+- For "type", determine if money was deducted ("Expense") or credited ("Income").
+- For "accountId", choose the BEST matching account id from Available Accounts. If unsure or not in the list, use specifically the string "unknown".
+- For "categoryId", choose the BEST matching category id from Available Categories. If unsure or not in the list, use specifically the string "unknown".
+- For "payee", string representing the recipient or sender.
+
 Notification Title: $rawTitle
 Notification Text: $rawText
         ''';
@@ -120,43 +154,49 @@ Notification Text: $rawText
         final cleanJson = textResponse.replaceAll('```json', '').replaceAll('```', '').trim();
         final Map<String, dynamic> jsonMap = jsonDecode(cleanJson);
 
-        if (jsonMap.containsKey('amount')) {
-          parsedAmount = (jsonMap['amount'] as num).toDouble();
+        if (jsonMap.containsKey('amount')) parsedAmount = (jsonMap['amount'] as num).toDouble();
+        if (jsonMap.containsKey('payee')) parsedPayee = jsonMap['payee'].toString();
+        if (jsonMap.containsKey('type')) {
+           final t = jsonMap['type'].toString();
+           if (t == 'Expense' || t == 'Income') parsedType = t;
         }
-        if (jsonMap.containsKey('payee')) {
-          parsedPayee = jsonMap['payee'].toString();
-        }
+        if (jsonMap.containsKey('accountId')) parsedAccountId = jsonMap['accountId'].toString();
+        if (jsonMap.containsKey('categoryId')) parsedCategoryId = jsonMap['categoryId'].toString();
       } catch (e) {
-        // NO INTERNET, API LIMIT, OR SERVICE UNAVAILABLE
         print("Gemini Parsing Failed: $e");
-        // Returning FALSE indicates the Native Queue should NOT delete this message yet!
         return false; 
       }
     }
 
-    // 2. Fallback to Native Regex if Gemini wasn't configured or failed mapping
     if (parsedAmount == null) {
-      if (fallbackAmount == null || fallbackAmount.isEmpty) {
-        // Completely useless notification, mark as processed so Native queue deletes it
-        return true; 
-      }
+      if (fallbackAmount == null || fallbackAmount.isEmpty) return true; 
       parsedAmount = double.tryParse(fallbackAmount);
-      if (parsedAmount == null) return true; // Malformed fallback
+      if (parsedAmount == null) return true; 
     }
 
-    // 3. Match against pending interactions
+    // Resolve "unknown" fallbacks
+    if (parsedAccountId == 'unknown') {
+      final unkAcc = await _getOrCreateUnknownAccount();
+      parsedAccountId = unkAcc.id;
+    }
+    if (parsedCategoryId == 'unknown') {
+      final unkCat = await _getOrCreateUnknownCategory();
+      parsedCategoryId = unkCat.id;
+    }
+
     final pending = await _repo.findPendingByAmount(parsedAmount);
 
     if (pending != null) {
-      // It matches an intended transaction: Confirm it and deduct!
       final confirmed = pending.copyWith(
         status: 'success',
         title: parsedPayee != 'Unknown Payment' ? parsedPayee : pending.title,
         description: parsedPayee.isNotEmpty ? 'Payee: $parsedPayee (UPI via Offline Sync)' : pending.description,
+        type: parsedType != 'Expense' && parsedType != 'Income' ? pending.type : parsedType,
+        accountId: parsedAccountId != 'unknown' ? parsedAccountId : pending.accountId,
+        categoryId: parsedCategoryId != 'unknown' ? parsedCategoryId : pending.categoryId,
       );
       await _repo.updateTransaction(confirmed);
 
-      // Deduct account balance natively
       final account = await _accountRepo.getAccountById(confirmed.accountId);
       if (account != null) {
         final double newBal = confirmed.type == 'Expense' 
@@ -166,29 +206,26 @@ Notification Text: $rawText
       }
 
     } else {
-      // Unplanned transaction - send to Needs Review inbox
       final newTx = TransactionModel(
-        id: messageId ?? DateTime.now().millisecondsSinceEpoch.toString(), // Use native ID to prevent exact duplicates naturally
+        id: messageId ?? DateTime.now().millisecondsSinceEpoch.toString(), 
         amount: parsedAmount,
         timestamp: DateTime.now(),
         title: parsedPayee.isNotEmpty ? 'Payment to $parsedPayee' : 'Unknown Transfer',
-        type: 'Expense',
-        accountId: '', 
-        categoryId: '',
+        type: parsedType,
+        accountId: parsedAccountId, 
+        categoryId: parsedCategoryId,
         status: 'needs_review',
         rawNotificationText: "$rawTitle : $rawText",
       );
       
-      // Attempt to save to Hive. If it fails, we shouldn't clear the queue.
       try {
         await _repo.addTransaction(newTx);
       } catch (e) {
         print("Failed to save synced transaction to Hive: $e");
-        return false; // Leave in native queue
+        return false; 
       }
     }
 
-    // If we reach here, Ledger successfully synced data!
     return true; 
   }
 
@@ -211,9 +248,10 @@ Notification Text: $rawText
 final notificationServiceProvider = Provider<NotificationService>((ref) {
   final repo = ref.watch(transactionRepositoryProvider);
   final accountRepo = ref.watch(accountRepositoryProvider);
+  final categoryRepo = ref.watch(categoryRepositoryProvider);
   final settingsRepo = ref.watch(userSettingsRepositoryProvider);
   
-  final service = NotificationService(repo, accountRepo, settingsRepo);
+  final service = NotificationService(repo, accountRepo, categoryRepo, settingsRepo);
   service.startListening();
   ref.onDispose(() => service.dispose());
   return service;
