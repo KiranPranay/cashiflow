@@ -1,4 +1,4 @@
-package com.pranay.cashi_flow.cashi_flow
+package com.weberq.cashiflow
 
 import android.content.Context
 import android.service.notification.NotificationListenerService
@@ -59,7 +59,7 @@ class UpiNotificationListenerService : NotificationListenerService() {
     }
 
     private fun queueNotification(parsed: Map<String, String>) {
-        val prefs = applicationContext.getSharedPreferences("cashi_flow_notifications", Context.MODE_PRIVATE)
+        val prefs = applicationContext.getSharedPreferences("cashiflow_notifications", Context.MODE_PRIVATE)
         val currentQueueStr = prefs.getString("pending_sms", "[]")
         
         try {

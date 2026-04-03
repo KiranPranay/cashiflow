@@ -7,7 +7,7 @@ import 'package:cashi_flow/domain/models/transaction_model.dart';
 import 'package:cashi_flow/domain/providers/transaction_providers.dart';
 
 /// Same native MethodChannel as the full PayHubScreen
-const _upiChannel = MethodChannel('com.cashi_flow/upi');
+const _upiChannel = MethodChannel('com.weberq.cashiflow/upi');
 
 class PayHubBottomSheet extends ConsumerStatefulWidget {
   const PayHubBottomSheet({super.key});

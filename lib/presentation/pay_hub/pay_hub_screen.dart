@@ -7,7 +7,7 @@ import 'package:cashi_flow/domain/providers/transaction_providers.dart';
 import 'package:go_router/go_router.dart';
 
 /// MethodChannel to talk to our native Kotlin UPI handler
-const _upiChannel = MethodChannel('com.cashi_flow/upi');
+const _upiChannel = MethodChannel('com.weberq.cashiflow/upi');
 
 class PayHubScreen extends ConsumerStatefulWidget {
   const PayHubScreen({super.key});

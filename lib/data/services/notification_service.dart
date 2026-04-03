@@ -15,8 +15,8 @@ import 'package:cashi_flow/domain/providers/account_providers.dart';
 import 'package:cashi_flow/domain/providers/category_providers.dart';
 import 'package:cashi_flow/domain/providers/user_settings_providers.dart';
 
-const _upiChannel = MethodChannel('com.cashi_flow/upi');
-const _notifChannel = EventChannel('com.cashi_flow/notifications');
+const _upiChannel = MethodChannel('com.weberq.cashiflow/upi');
+const _notifChannel = EventChannel('com.weberq.cashiflow/notifications');
 
 class NotificationService {
   final TransactionRepository _repo;

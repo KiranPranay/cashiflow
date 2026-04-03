@@ -1,4 +1,4 @@
-package com.pranay.cashi_flow.cashi_flow
+package com.weberq.cashiflow
 
 import android.content.ComponentName
 import android.content.Intent
@@ -16,8 +16,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
-    private val UPI_CHANNEL = "com.cashi_flow/upi"
-    private val NOTIF_CHANNEL = "com.cashi_flow/notifications"
+    private val UPI_CHANNEL = "com.weberq.cashiflow/upi"
+    private val NOTIF_CHANNEL = "com.weberq.cashiflow/notifications"
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -140,7 +140,7 @@ class MainActivity : FlutterActivity() {
 
     private fun handleGetPendingNotifications(result: MethodChannel.Result) {
         try {
-            val prefs = getSharedPreferences("cashi_flow_notifications", Context.MODE_PRIVATE)
+            val prefs = getSharedPreferences("cashiflow_notifications", Context.MODE_PRIVATE)
             val jsonStr = prefs.getString("pending_sms", "[]") ?: "[]"
             val jsonArray = JSONArray(jsonStr)
             
@@ -168,7 +168,7 @@ class MainActivity : FlutterActivity() {
             return
         }
         try {
-            val prefs = getSharedPreferences("cashi_flow_notifications", Context.MODE_PRIVATE)
+            val prefs = getSharedPreferences("cashiflow_notifications", Context.MODE_PRIVATE)
             val jsonStr = prefs.getString("pending_sms", "[]") ?: "[]"
             val oldArray = JSONArray(jsonStr)
             val newArray = JSONArray()
@@ -178,7 +178,7 @@ class MainActivity : FlutterActivity() {
                 val obj = oldArray.getJSONObject(i)
                 if (obj.optString("messageId") == id) {
                     found = true
-                    continue // Skip adding this item to effectively delete it
+                    continue 
                 }
                 newArray.put(obj)
             }
