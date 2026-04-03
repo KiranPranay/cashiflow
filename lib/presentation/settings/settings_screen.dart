@@ -10,6 +10,7 @@ import 'package:cashi_flow/domain/providers/user_settings_providers.dart';
 import 'package:cashi_flow/domain/providers/account_providers.dart';
 import 'package:cashi_flow/domain/providers/category_providers.dart';
 import 'package:cashi_flow/data/services/notification_service.dart';
+import 'package:cashi_flow/data/services/backup_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -235,6 +236,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     onTap: () => _confirmWipe(context, ref),
                   ),
                 ]),
+
+                _buildSectionHeader('DATA MANAGEMENT'),
+                _buildSettingsGroup([
+                  ListTile(
+                    leading: const Icon(Icons.upload_file, color: Colors.blue),
+                    title: const Text('Export Backup', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Save your data locally'),
+                    onTap: () => _exportData(context, ref),
+                  ),
+                  Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  ListTile(
+                    leading: const Icon(Icons.download_rounded, color: Colors.green),
+                    title: const Text('Restore Data', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Import from a local backup'),
+                    onTap: () => _confirmImport(context, ref),
+                  ),
+                ]),
+                
                 
                 const SizedBox(height: 120),
               ],
@@ -363,6 +382,51 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
       )
     ));
+  }
+
+  void _exportData(BuildContext context, WidgetRef ref) async {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Preparing backup...')));
+    final backupSvc = ref.read(backupServiceProvider);
+    final success = await backupSvc.exportBackup();
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Backup exported successfully!')));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Export cancelled or failed.')));
+      }
+    }
+  }
+
+  void _confirmImport(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Warning', style: TextStyle(color: Colors.orange)),
+        content: const Text('Restoring a backup will irrevocably OVERWRITE all current data. Do you wish to proceed?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true), 
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Proceed & Overwrite')
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Awaiting file selection...')));
+      final backupSvc = ref.read(backupServiceProvider);
+      final success = await backupSvc.importBackup();
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Data restored successfully! Restarting...')));
+          context.go('/onboarding');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Import cancelled or data invalid.')));
+        }
+      }
+    }
   }
 
   void _confirmWipe(BuildContext context, WidgetRef ref) async {
