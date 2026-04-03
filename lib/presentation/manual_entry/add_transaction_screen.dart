@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cashi_flow/domain/models/transaction_model.dart';
+import 'package:cashi_flow/domain/models/account_model.dart';
+import 'package:cashi_flow/domain/models/category_model.dart';
 import 'package:cashi_flow/domain/providers/transaction_providers.dart';
 import 'package:cashi_flow/domain/providers/account_providers.dart';
 import 'package:cashi_flow/domain/providers/category_providers.dart';
+import 'package:cashi_flow/presentation/shared/searchable_picker.dart';
+import 'package:cashi_flow/presentation/shared/creation_dialogs.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -210,12 +214,30 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             
             // Account Selector
             accountsAsync.when(
-              data: (accounts) => DropdownButtonFormField<String>(
-                value: _accountId,
-                items: accounts.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
-                onChanged: (v) => setState(() => _accountId = v),
-                decoration: InputDecoration(labelText: _type == 'Transfer' ? 'Transfer From' : 'Account', prefixIcon: const Icon(Icons.account_balance)),
-              ),
+              data: (accounts) {
+                final selectedAccount = accounts.where((a) => a.id == _accountId).firstOrNull;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.account_balance),
+                  title: Text(_type == 'Transfer' ? 'Transfer From' : 'Account'),
+                  subtitle: Text(selectedAccount?.name ?? 'Select Account'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    final selected = await SearchablePicker.show<AccountModel>(
+                      context: context,
+                      title: 'Select Account',
+                      items: accounts,
+                      itemLabel: (a) => a.name,
+                      itemSubtitle: (a) => a.type,
+                      addNewLabel: 'Add New Account',
+                      onAddNew: () => showAddAccountDialog(context, ref),
+                    );
+                    if (selected != null) {
+                      setState(() => _accountId = selected.id);
+                    }
+                  },
+                );
+              },
               loading: () => const LinearProgressIndicator(),
               error: (e, s) => const Text('Error loading accounts'),
             ),
@@ -225,11 +247,26 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               categoriesAsync.when(
                 data: (cats) {
                   final filtered = cats.where((c) => c.type == _type).toList();
-                  return DropdownButtonFormField<String>(
-                    value: _categoryId,
-                    items: filtered.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-                    onChanged: (v) => setState(() => _categoryId = v),
-                    decoration: const InputDecoration(labelText: 'Category', prefixIcon: Icon(Icons.category)),
+                  final selectedCat = filtered.where((c) => c.id == _categoryId).firstOrNull;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.category),
+                    title: const Text('Category'),
+                    subtitle: Text(selectedCat?.name ?? 'Select Category'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      final selected = await SearchablePicker.show<CategoryModel>(
+                        context: context,
+                        title: 'Select Category',
+                        items: filtered,
+                        itemLabel: (c) => c.name,
+                        addNewLabel: 'Add New Category',
+                        onAddNew: () => showAddCategoryDialog(context, ref, defaultType: _type),
+                      );
+                      if (selected != null) {
+                        setState(() => _categoryId = selected.id);
+                      }
+                    },
                   );
                 },
                 loading: () => const LinearProgressIndicator(),
@@ -238,12 +275,30 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             
             if (_type == 'Transfer')
               accountsAsync.when(
-                data: (accounts) => DropdownButtonFormField<String>(
-                  value: _destinationAccountId,
-                  items: accounts.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
-                  onChanged: (v) => setState(() => _destinationAccountId = v),
-                  decoration: const InputDecoration(labelText: 'Transfer To', prefixIcon: Icon(Icons.account_balance)),
-                ),
+                data: (accounts) {
+                  final selectedDest = accounts.where((a) => a.id == _destinationAccountId).firstOrNull;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.account_balance),
+                    title: const Text('Transfer To'),
+                    subtitle: Text(selectedDest?.name ?? 'Select Destination Account'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      final selected = await SearchablePicker.show<AccountModel>(
+                        context: context,
+                        title: 'Select Destination Account',
+                        items: accounts,
+                        itemLabel: (a) => a.name,
+                        itemSubtitle: (a) => a.type,
+                        addNewLabel: 'Add New Account',
+                        onAddNew: () => showAddAccountDialog(context, ref),
+                      );
+                      if (selected != null) {
+                        setState(() => _destinationAccountId = selected.id);
+                      }
+                    },
+                  );
+                },
                 loading: () => const LinearProgressIndicator(),
                 error: (e, s) => const Text('Error loading accounts'),
               ),

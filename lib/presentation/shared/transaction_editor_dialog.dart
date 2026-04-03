@@ -7,6 +7,8 @@ import 'package:cashi_flow/domain/models/category_model.dart';
 import 'package:cashi_flow/domain/providers/transaction_providers.dart';
 import 'package:cashi_flow/domain/providers/account_providers.dart';
 import 'package:cashi_flow/domain/providers/category_providers.dart';
+import 'package:cashi_flow/presentation/shared/searchable_picker.dart';
+import 'package:cashi_flow/presentation/shared/creation_dialogs.dart';
 
 class TransactionEditorDialog extends ConsumerStatefulWidget {
   final TransactionModel tx;
@@ -262,31 +264,94 @@ class _TransactionEditorDialogState extends ConsumerState<TransactionEditorDialo
               decoration: const InputDecoration(labelText: 'Reference Code (Optional)', prefixIcon: Icon(Icons.numbers)),
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _accountId,
-              items: accounts.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
-              onChanged: (v) => setState(() => _accountId = v),
-              decoration: InputDecoration(labelText: accountLabel),
-              hint: accountsAsync.isLoading ? const Text('Loading...') : null,
+            accountsAsync.when(
+              data: (accounts) {
+                final selectedAccount = accounts.where((a) => a.id == _accountId).firstOrNull;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.account_balance),
+                  title: Text(accountLabel),
+                  subtitle: Text(selectedAccount?.name ?? 'Select Account'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    final selected = await SearchablePicker.show<AccountModel>(
+                      context: context,
+                      title: 'Select Account',
+                      items: accounts,
+                      itemLabel: (a) => a.name,
+                      itemSubtitle: (a) => a.type,
+                      addNewLabel: 'Add New Account',
+                      onAddNew: () => showAddAccountDialog(context, ref),
+                    );
+                    if (selected != null) {
+                      setState(() => _accountId = selected.id);
+                    }
+                  },
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (e, s) => const Text('Error loading accounts'),
             ),
             const SizedBox(height: 16),
             
             if (_type != 'Transfer')
-              DropdownButtonFormField<String>(
-                value: _categoryId,
-                items: categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-                onChanged: (v) => setState(() => _categoryId = v),
-                decoration: const InputDecoration(labelText: 'Category'),
-                hint: categoriesAsync.isLoading ? const Text('Loading...') : null,
+              categoriesAsync.when(
+                data: (cats) {
+                  final filtered = cats.where((c) => c.type == _type).toList();
+                  final selectedCat = filtered.where((c) => c.id == _categoryId).firstOrNull;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.category),
+                    title: const Text('Category'),
+                    subtitle: Text(selectedCat?.name ?? 'Select Category'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      final selected = await SearchablePicker.show<CategoryModel>(
+                        context: context,
+                        title: 'Select Category',
+                        items: filtered,
+                        itemLabel: (c) => c.name,
+                        addNewLabel: 'Add New Category',
+                        onAddNew: () => showAddCategoryDialog(context, ref, defaultType: _type),
+                      );
+                      if (selected != null) {
+                        setState(() => _categoryId = selected.id);
+                      }
+                    },
+                  );
+                },
+                loading: () => const LinearProgressIndicator(),
+                error: (e, s) => const Text('Error loading categories'),
               ),
               
             if (_type == 'Transfer')
-              DropdownButtonFormField<String>(
-                value: _destinationAccountId,
-                items: accounts.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
-                onChanged: (v) => setState(() => _destinationAccountId = v),
-                decoration: const InputDecoration(labelText: 'Transfer To (Account)'),
-                hint: accountsAsync.isLoading ? const Text('Loading accounts...') : null,
+              accountsAsync.when(
+                data: (accounts) {
+                  final selectedDest = accounts.where((a) => a.id == _destinationAccountId).firstOrNull;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.account_balance),
+                    title: const Text('Transfer To (Account)'),
+                    subtitle: Text(selectedDest?.name ?? 'Select Destination Account'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      final selected = await SearchablePicker.show<AccountModel>(
+                        context: context,
+                        title: 'Select Destination Account',
+                        items: accounts,
+                        itemLabel: (a) => a.name,
+                        itemSubtitle: (a) => a.type,
+                        addNewLabel: 'Add New Account',
+                        onAddNew: () => showAddAccountDialog(context, ref),
+                      );
+                      if (selected != null) {
+                        setState(() => _destinationAccountId = selected.id);
+                      }
+                    },
+                  );
+                },
+                loading: () => const LinearProgressIndicator(),
+                error: (e, s) => const Text('Error loading accounts'),
               ),
           ],
         ),

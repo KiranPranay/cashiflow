@@ -11,6 +11,7 @@ import 'package:cashi_flow/domain/providers/account_providers.dart';
 import 'package:cashi_flow/domain/providers/category_providers.dart';
 import 'package:cashi_flow/data/services/notification_service.dart';
 import 'package:cashi_flow/data/services/backup_service.dart';
+import 'package:cashi_flow/presentation/shared/creation_dialogs.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -141,7 +142,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           contentPadding: const EdgeInsets.symmetric(horizontal: 32),
                           leading: const Icon(Icons.add_circle_outline, color: Colors.blue),
                           title: const Text('Link New Account', style: TextStyle(color: Colors.blue)),
-                          onTap: () => _showAddAccountDialog(),
+                          onTap: () => showAddAccountDialog(context, ref),
                         ),
                       ],
                     ),
@@ -169,7 +170,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           contentPadding: const EdgeInsets.symmetric(horizontal: 32),
                           leading: const Icon(Icons.add_circle_outline, color: Colors.orange),
                           title: const Text('Create Category', style: TextStyle(color: Colors.orange)),
-                          onTap: () => _showAddCategoryDialog(),
+                          onTap: () => showAddCategoryDialog(context, ref),
                         ),
                       ],
                     ),
@@ -302,86 +303,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ref.read(accountRepositoryProvider).deleteAccount(id);
   }
 
-  void _showAddAccountDialog() {
-    final nameCtrl = TextEditingController();
-    final balCtrl = TextEditingController();
-    String type = 'Bank';
-    showDialog(context: context, builder: (ctx) => StatefulBuilder(
-      builder: (context, setStateBuilder) => AlertDialog(
-        title: const Text('Add Account'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              value: type,
-              items: ['Bank', 'Credit', 'Wallet', 'Cash'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-              onChanged: (v) => setStateBuilder(() => type = v!),
-              decoration: const InputDecoration(labelText: 'Type'),
-            ),
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Account Name')),
-            TextField(controller: balCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Current Balance / Bill')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () {
-            final bal = double.tryParse(balCtrl.text) ?? 0;
-            if (nameCtrl.text.isNotEmpty) {
-              ref.read(accountRepositoryProvider).addAccount(AccountModel(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
-                name: nameCtrl.text,
-                type: type,
-                balance: type == 'Credit' ? -bal.abs() : bal,
-                creditLimit: type == 'Credit' ? bal * 2 : 0,
-                iconName: 'account_balance',
-              ));
-              Navigator.pop(ctx);
-            }
-          }, child: const Text('Add')),
-        ],
-      )
-    ));
-  }
-
   void _deleteCategory(String id) {
     ref.read(categoryRepositoryProvider).deleteCategory(id);
-  }
-
-  void _showAddCategoryDialog() {
-    final nameCtrl = TextEditingController();
-    String type = 'Expense';
-    showDialog(context: context, builder: (ctx) => StatefulBuilder(
-      builder: (context, setStateBuilder) => AlertDialog(
-        title: const Text('Add Category'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              value: type,
-              items: ['Expense', 'Income', 'Transfer'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-              onChanged: (v) => setStateBuilder(() => type = v!),
-              decoration: const InputDecoration(labelText: 'Type'),
-            ),
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Category Name')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () {
-            if (nameCtrl.text.isNotEmpty) {
-              ref.read(categoryRepositoryProvider).addCategory(CategoryModel(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
-                name: nameCtrl.text,
-                type: type,
-                iconName: 'label',
-                colorHex: 0xFF00E676,
-              ));
-              Navigator.pop(ctx);
-            }
-          }, child: const Text('Add')),
-        ],
-      )
-    ));
   }
 
   void _exportData(BuildContext context, WidgetRef ref) async {
