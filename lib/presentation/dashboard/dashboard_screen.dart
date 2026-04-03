@@ -134,13 +134,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Available balance', 
                         style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w500)),
-                      Text('CASHI', 
-                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
+                      Image.asset(
+                        'assets/logo.png',
+                        height: 32,
+                        color: Colors.white,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),

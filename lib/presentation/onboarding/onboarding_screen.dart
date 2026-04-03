@@ -156,6 +156,13 @@ class _IncomeStepState extends State<_IncomeStep> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Center(
+            child: Image.asset(
+              'assets/logo.png',
+              height: 120,
+            ),
+          ),
+          const SizedBox(height: 24),
           Text('Expected Income', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           const Text('Declare your expected monthly income sources (Salary, Freelance, etc.) to set baseline savings goals.'),
@@ -318,7 +325,12 @@ class _FinishStep extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.check_circle_outline, size: 100, color: Colors.greenAccent),
+          Image.asset(
+            'assets/logo.png',
+            height: 120,
+          ),
+          const SizedBox(height: 24),
+          const Icon(Icons.check_circle_outline, size: 60, color: Colors.greenAccent),
           const SizedBox(height: 24),
           Text('All Set!', style: Theme.of(context).textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),

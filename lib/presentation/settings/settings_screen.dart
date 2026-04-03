@@ -255,6 +255,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ]),
                 
+                const SizedBox(height: 48),
+                Center(
+                  child: Column(
+                    children: [
+                      Image.asset(
+                        'assets/logo.png',
+                        height: 60,
+                        opacity: const AlwaysStoppedAnimation(0.5),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'CashiFlow v1.0.0',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 
                 const SizedBox(height: 120),
               ],
