@@ -9,6 +9,7 @@ import 'package:cashi_flow/domain/models/transaction_model.dart';
 import 'package:cashi_flow/domain/providers/user_settings_providers.dart';
 import 'package:cashi_flow/domain/providers/account_providers.dart';
 import 'package:cashi_flow/domain/providers/category_providers.dart';
+import 'package:cashi_flow/core/secrets.dart';
 import 'package:cashi_flow/data/services/notification_service.dart';
 import 'package:cashi_flow/data/services/backup_service.dart';
 import 'package:cashi_flow/presentation/shared/creation_dialogs.dart';
@@ -186,7 +187,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     data: (settings) => ListTile(
                       leading: const Icon(Icons.auto_awesome, color: Colors.purpleAccent),
                       title: const Text('Gemini Engine API', style: TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(settings?.geminiApiKey != null ? 'Linked' : 'Not configured'),
+                      // A built-in key may already be baked in; a user key (if
+                      // set) only overrides it.
+                      subtitle: Text(settings?.geminiApiKey != null
+                          ? 'Custom key set (overrides built-in)'
+                          : isEmbeddedGeminiKeyConfigured
+                              ? 'Using built-in key'
+                              : 'Not configured'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => _showEditGeminiKeyDialog(settings),
                     ),
@@ -404,12 +411,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _showEditGeminiKeyDialog(UserSettingsModel? settings) {
     if (settings == null) return;
     final keyCtrl = TextEditingController(text: settings.geminiApiKey);
+    // Helper text explains that the app ships with a built-in key, so this
+    // field is optional and only overrides the built-in one.
+    final String helperText = isEmbeddedGeminiKeyConfigured
+        ? 'A built-in API key is already configured. This is optional — '
+            'set your own key only to override the built-in one.'
+        : 'Optional. Provide your own Google AI Studio key to enable AI parsing.';
     showDialog(context: context, builder: (ctx) => AlertDialog(
       title: const Text('Gemini API Key'),
-      content: TextField(
-        controller: keyCtrl, 
-        decoration: const InputDecoration(labelText: 'AI/Studio API Key'),
-        obscureText: true,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: keyCtrl,
+            decoration: const InputDecoration(labelText: 'AI/Studio API Key'),
+            obscureText: true,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            helperText,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),

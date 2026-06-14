@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:cashi_flow/core/secrets.dart';
 import 'package:cashi_flow/domain/models/transaction_model.dart';
+import 'package:cashi_flow/domain/models/user_settings_model.dart';
 import 'package:cashi_flow/domain/models/account_model.dart';
 import 'package:cashi_flow/domain/models/category_model.dart';
 import 'package:cashi_flow/domain/repositories/transaction_repository.dart';
@@ -18,6 +20,9 @@ import 'package:cashi_flow/domain/providers/user_settings_providers.dart';
 const _upiChannel = MethodChannel('com.weberq.cashiflow/upi');
 const _notifChannel = EventChannel('com.weberq.cashiflow/notifications');
 
+// Single place to swap the Gemini model. Using the cheapest flash-lite tier.
+const _kGeminiModel = 'gemini-2.5-flash-lite';
+
 class NotificationService {
   final TransactionRepository _repo;
   final AccountRepository _accountRepo;
@@ -27,6 +32,16 @@ class NotificationService {
   bool _isProcessingQueue = false;
 
   NotificationService(this._repo, this._accountRepo, this._categoryRepo, this._settingsRepo);
+
+  /// Resolves which Gemini API key to use:
+  ///  (a) the embedded key if it's been baked in (non-empty, not placeholder),
+  ///  otherwise (b) the user's own key from settings. Returns null if neither.
+  String? _resolveGeminiKey(UserSettingsModel? settings) {
+    if (isEmbeddedGeminiKeyConfigured) return kEmbeddedGeminiApiKey;
+    final userKey = settings?.geminiApiKey;
+    if (userKey != null && userKey.isNotEmpty) return userKey;
+    return null;
+  }
 
   void startListening() {
     _syncOfflineQueue();
@@ -116,7 +131,7 @@ class NotificationService {
     String? parsedReference;
 
     final settings = await _settingsRepo.watchSettings().first;
-    final geminiKey = settings?.geminiApiKey;
+    final geminiKey = _resolveGeminiKey(settings);
 
     if (geminiKey != null && geminiKey.isNotEmpty) {
       try {
@@ -127,7 +142,7 @@ class NotificationService {
         final categoriesListStr = categories.map((c) => '{"id": "${c.id}", "name": "${c.name}"}').join(',\\n');
 
         final model = GenerativeModel(
-          model: 'gemini-2.5-flash',
+          model: _kGeminiModel,
           apiKey: geminiKey,
         );
         final prompt = '''

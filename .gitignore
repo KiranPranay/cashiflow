@@ -39,6 +39,15 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Local plaintext key file — never commit real keys.
+apikey.txt
+
+# Secrets: lib/core/secrets.dart is intentionally COMMITTED with a placeholder
+# key only. Never commit a real key into it — supply real keys at build time via
+# --dart-define=GEMINI_API_KEY=xxx. If you ever paste a real key locally,
+# uncomment the next line to keep it out of version control.
+# lib/core/secrets.dart
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
