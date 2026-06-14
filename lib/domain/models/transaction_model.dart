@@ -84,4 +84,4 @@ class TransactionModel extends HiveObject {
       rawNotificationText: rawNotificationText ?? this.rawNotificationText,
     );
   }
-} // closing brace
+}

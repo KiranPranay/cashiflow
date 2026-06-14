@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:quick_actions/quick_actions.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cashi_flow/domain/models/transaction_model.dart';
 import 'package:cashi_flow/domain/models/account_model.dart';
 import 'package:cashi_flow/domain/models/category_model.dart';
@@ -15,12 +16,19 @@ void main() async {
   
   // Initialize Hive
   await Hive.initFlutter();
-  
-  // Safely delete legacy data structure (approved wipe)
-  try {
-    await Hive.deleteBoxFromDisk('transactions');
-  } catch (_) {}
-  
+
+  // BUGFIX(1): Previously the legacy 'transactions' box was deleted from disk
+  // on EVERY launch, which risked data loss. Run it as a guarded one-time
+  // migration instead: only delete the stale box once, then persist a flag so
+  // it never runs again.
+  final prefs = await SharedPreferences.getInstance();
+  if (!(prefs.getBool('legacy_tx_migrated') ?? false)) {
+    try {
+      await Hive.deleteBoxFromDisk('transactions');
+    } catch (_) {}
+    await prefs.setBool('legacy_tx_migrated', true);
+  }
+
   // Register Adapters
   Hive.registerAdapter(TransactionModelAdapter());
   Hive.registerAdapter(AccountModelAdapter());

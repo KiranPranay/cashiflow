@@ -9,6 +9,32 @@ import 'package:cashi_flow/domain/models/category_model.dart';
 import 'package:cashi_flow/domain/models/user_settings_model.dart';
 
 class BackupService {
+  // BUGFIX(2): Robustly coerce a JSON value into an int regardless of whether
+  // it arrives as an int, a double, or a numeric String. Older/newer backups
+  // may encode colorHex either way; the previous `int.tryParse(x.toString())`
+  // could silently yield 0 (an invisible/transparent color). [fallback] is
+  // returned for null or unparseable values.
+  int _asInt(dynamic value, {required int fallback}) {
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) {
+      return int.tryParse(value) ?? double.tryParse(value)?.toInt() ?? fallback;
+    }
+    return fallback;
+  }
+
+  // BUGFIX(2): Robustly coerce a JSON value into a double (int/double/String/
+  // null all handled) so creditLimit/balance never throw on an unexpected type.
+  double _asDouble(dynamic value, {double fallback = 0.0}) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? fallback;
+    return fallback;
+  }
+
+  // BUGFIX(3): Convert a JSON value to a String while preserving genuine nulls
+  // as null, so an absent/null field is never stored as the literal "null".
+  String? _asStringOrNull(dynamic value) => value?.toString();
+
   Future<bool> exportBackup() async {
     try {
       final txBox = Hive.box<TransactionModel>('transactions_v2');
@@ -38,6 +64,7 @@ class BackupService {
         'balance': a.balance,
         'creditLimit': a.creditLimit,
         'iconName': a.iconName,
+        // BUGFIX(2): emit colorHex as a raw int so it round-trips via _asInt().
         'colorHex': a.colorHex,
       }).toList();
 
@@ -46,6 +73,7 @@ class BackupService {
         'name': c.name,
         'type': c.type,
         'iconName': c.iconName,
+        // BUGFIX(2): emit colorHex as a raw int so it round-trips via _asInt().
         'colorHex': c.colorHex,
       }).toList();
 
@@ -128,7 +156,9 @@ class BackupService {
             name: c['name'].toString(),
             type: c['type'].toString(),
             iconName: c['iconName'].toString(),
-            colorHex: int.tryParse(c['colorHex'].toString()) ?? 0,
+            // BUGFIX(2): parse colorHex robustly; fall back to the model's
+            // default grey (0xFFAAAAAA) rather than 0 (invisible) on failure.
+            colorHex: _asInt(c['colorHex'], fallback: 0xFFAAAAAA),
           )).toList();
           for (var c in cats) {
             await catBox.put(c.id, c);
@@ -141,10 +171,12 @@ class BackupService {
             id: a['id'].toString(),
             name: a['name'].toString(),
             type: a['type'].toString(),
-            balance: (a['balance'] as num).toDouble(),
-            creditLimit: (a['creditLimit'] as num).toDouble(),
+            // BUGFIX(2): coerce numeric fields safely (int/double/String/null)
+            // so an unexpected JSON type can't throw and abort the whole import.
+            balance: _asDouble(a['balance']),
+            creditLimit: _asDouble(a['creditLimit']),
             iconName: a['iconName'].toString(),
-            colorHex: (a['colorHex'] != null ? int.tryParse(a['colorHex'].toString()) ?? 0 : 0),
+            colorHex: _asInt(a['colorHex'], fallback: 0xFFAAAAAA),
           )).toList();
           for (var a in accs) {
             await accBox.put(a.id, a);
@@ -160,12 +192,14 @@ class BackupService {
             title: t['title'].toString(),
             type: t['type'].toString(),
             accountId: t['accountId'].toString(),
-            categoryId: t['categoryId']?.toString(),
-            destinationAccountId: t['destinationAccountId']?.toString(),
-            referenceNumber: t['referenceNumber']?.toString(),
-            description: t['description']?.toString(),
+            categoryId: _asStringOrNull(t['categoryId']),
+            // BUGFIX(3): preserve genuine nulls so optional fields are never
+            // stored as the literal string "null".
+            destinationAccountId: _asStringOrNull(t['destinationAccountId']),
+            referenceNumber: _asStringOrNull(t['referenceNumber']),
+            description: _asStringOrNull(t['description']),
             status: t['status'].toString(),
-            rawNotificationText: t['rawNotificationText']?.toString(),
+            rawNotificationText: _asStringOrNull(t['rawNotificationText']),
           )).toList();
           for (var tx in txs) {
             await txBox.put(tx.id, tx);
