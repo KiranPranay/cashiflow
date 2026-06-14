@@ -23,6 +23,22 @@ const _notifChannel = EventChannel('com.weberq.cashiflow/notifications');
 // Single place to swap the Gemini model. Using the cheapest flash-lite tier.
 const _kGeminiModel = 'gemini-2.5-flash-lite';
 
+// On-device parsing patterns. These mirror the native Kotlin regex in
+// UpiNotificationListenerService.kt so notifications are parsed locally first
+// and AI is only a fallback (privacy + cost).
+final RegExp _kAmountRe = RegExp(
+  r'(?:₹|rs\.?|inr)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)',
+  caseSensitive: false,
+);
+final RegExp _kRefRe = RegExp(
+  r'(?:upi\s*ref(?:erence)?(?:\s*(?:no|number|id))?|ref(?:erence)?\s*(?:no\.?|number|id)?|utr|txn\s*(?:id|no)?|transaction\s*id)\s*[:#-]?\s*([a-z0-9]{6,})',
+  caseSensitive: false,
+);
+final RegExp _kPayeeRe = RegExp(
+  r'(?:to|from|paid)\s+(.+?)(?:\s+(?:is\s+)?(?:successful|completed|done)|[.!]|$)',
+  caseSensitive: false,
+);
+
 class NotificationService {
   final TransactionRepository _repo;
   final AccountRepository _accountRepo;
@@ -41,6 +57,58 @@ class NotificationService {
     final userKey = settings?.geminiApiKey;
     if (userKey != null && userKey.isNotEmpty) return userKey;
     return null;
+  }
+
+  /// On-device parse of a notification using regex only (no network, no AI).
+  /// Mirrors the native Kotlin patterns. Returns null when no usable amount can
+  /// be found, which signals the caller it may fall back to Gemini.
+  _LocalParseResult? _parseLocally(Map<String, String> data) {
+    final rawTitle = data['rawTitle'] ?? '';
+    final rawText = data['rawText'] ?? '';
+    final combined = '$rawTitle $rawText';
+    final lower = combined.toLowerCase();
+
+    // Amount: regex over the raw text first, then the native pre-parsed amount.
+    double? amount;
+    final m = _kAmountRe.firstMatch(combined);
+    if (m != null) amount = double.tryParse(m.group(1)!.replaceAll(',', ''));
+    amount ??= double.tryParse(data['amount'] ?? '');
+    if (amount == null) return null; // no amount => caller may use AI fallback.
+
+    // Type: credited/received/added => Income; debited/paid/etc => Expense.
+    const incomeWords = ['credited', 'received', 'added'];
+    const expenseWords = [
+      'debited', 'paid', 'sent', 'spent', 'transferred', 'withdrawn', 'purchase'
+    ];
+    final isIncome = incomeWords.any(lower.contains);
+    final isExpense = expenseWords.any(lower.contains);
+    String type;
+    if (isIncome && !isExpense) {
+      type = 'Income';
+    } else if (isExpense) {
+      type = 'Expense';
+    } else {
+      // No directional keyword: trust the native-provided type, else Expense.
+      type = data['type'] == 'Income' ? 'Income' : 'Expense';
+    }
+
+    // Reference: regex, else the native-provided reference.
+    String? reference = _kRefRe.firstMatch(combined)?.group(1);
+    if (reference == null || reference.isEmpty) {
+      final nativeRef = data['reference'];
+      reference = (nativeRef != null && nativeRef.isNotEmpty) ? nativeRef : null;
+    }
+
+    // Payee: regex, else the native-provided payee.
+    String payee = _kPayeeRe.firstMatch(combined)?.group(1)?.trim() ?? '';
+    if (payee.isEmpty) payee = (data['payee'] ?? '').trim();
+
+    return _LocalParseResult(
+      amount: amount,
+      type: type,
+      payee: payee,
+      reference: reference,
+    );
   }
 
   void startListening() {
@@ -119,7 +187,6 @@ class NotificationService {
   Future<bool> _processSingleNotification(Map<String, String> data) async {
     final rawTitle = data['rawTitle'] ?? '';
     final rawText = data['rawText'] ?? '';
-    final fallbackAmount = data['amount'];
     final fallbackPayee = data['payee'] ?? 'Unknown Payment';
     final messageId = data['messageId'];
 
@@ -131,10 +198,30 @@ class NotificationService {
     String? parsedReference;
 
     final settings = await _settingsRepo.watchSettings().first;
-    final geminiKey = _resolveGeminiKey(settings);
 
-    if (geminiKey != null && geminiKey.isNotEmpty) {
-      try {
+    // Use the real notification time (postedAt epoch millis) so an item synced
+    // hours later is logged at its true time; fall back to now() if missing.
+    final postedAtMs = int.tryParse(data['postedAt'] ?? '');
+    final txTimestamp = postedAtMs != null
+        ? DateTime.fromMillisecondsSinceEpoch(postedAtMs)
+        : DateTime.now();
+
+    // === Local-first parsing (privacy + cost) ===
+    // Parse on-device with regex first; the common case never touches AI.
+    final local = _parseLocally(data);
+    if (local != null) {
+      parsedAmount = local.amount;
+      parsedType = local.type;
+      if (local.payee.isNotEmpty) parsedPayee = local.payee;
+      parsedReference = local.reference;
+      // Local parse can't map a specific account/category; left as 'unknown'.
+    }
+
+    // === AI fallback === only when local parsing found NO amount and a key exists.
+    if (parsedAmount == null) {
+      final geminiKey = _resolveGeminiKey(settings);
+      if (geminiKey != null && geminiKey.isNotEmpty) {
+        try {
         final accounts = await _accountRepo.watchAccounts().first;
         final categories = await _categoryRepo.watchCategories().first;
         
@@ -182,16 +269,19 @@ Notification Text: $rawText
         if (jsonMap.containsKey('referenceNumber') && jsonMap['referenceNumber'].toString().isNotEmpty) {
            parsedReference = jsonMap['referenceNumber'].toString();
         }
-      } catch (e) {
-        print("Gemini Parsing Failed: $e");
-        return false; 
+        } catch (e) {
+          // Treated as a parse failure (handled just below). We don't retry
+          // forever; the queue item is cleared in the next block.
+          print("Gemini Parsing Failed: $e");
+        }
       }
     }
 
     if (parsedAmount == null) {
-      if (fallbackAmount == null || fallbackAmount.isEmpty) return true; 
-      parsedAmount = double.tryParse(fallbackAmount);
-      if (parsedAmount == null) return true; 
+      // Both local and AI parsing failed. Return true so the queue item is
+      // cleared (not retried forever), but log it for debugging.
+      print("Skipping notification: no amount via local or AI. raw='$rawTitle : $rawText'");
+      return true;
     }
 
     // Resolve "unknown" fallbacks
@@ -236,9 +326,9 @@ Notification Text: $rawText
 
     } else {
       final newTx = TransactionModel(
-        id: messageId ?? DateTime.now().millisecondsSinceEpoch.toString(), 
+        id: messageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
         amount: parsedAmount,
-        timestamp: DateTime.now(),
+        timestamp: txTimestamp,
         title: parsedPayee.isNotEmpty ? 'Payment to $parsedPayee' : 'Unknown Transfer',
         type: parsedType,
         accountId: parsedAccountId, 
@@ -286,3 +376,19 @@ final notificationServiceProvider = Provider<NotificationService>((ref) {
   ref.onDispose(() => service.dispose());
   return service;
 });
+
+/// Result of on-device (regex) parsing of a payment notification. A non-null
+/// instance means parsing succeeded locally and Gemini was NOT needed.
+class _LocalParseResult {
+  final double amount;
+  final String type; // 'Expense' | 'Income'
+  final String payee;
+  final String? reference;
+
+  _LocalParseResult({
+    required this.amount,
+    required this.type,
+    required this.payee,
+    this.reference,
+  });
+}
