@@ -46,6 +46,9 @@ class NotificationService {
   final UserSettingsRepository _settingsRepo;
   StreamSubscription? _subscription;
   bool _isProcessingQueue = false;
+  // Tracks whether the most recent _processSingleNotification actually invoked
+  // Gemini, so we only rate-limit the AI path — never the local fast path.
+  bool _lastCallUsedGemini = false;
 
   NotificationService(this._repo, this._accountRepo, this._categoryRepo, this._settingsRepo);
 
@@ -130,6 +133,11 @@ class NotificationService {
     _subscription = null;
   }
 
+  /// Public entry point to drain the native offline queue. Safe to call
+  /// repeatedly (re-entrancy guarded). Invoked on startup and on every app
+  /// resume so syncing never depends on which screen happens to mount.
+  Future<void> syncOfflineQueue() => _syncOfflineQueue();
+
   Future<void> _syncOfflineQueue() async {
     if (_isProcessingQueue) return;
     _isProcessingQueue = true;
@@ -150,8 +158,13 @@ class NotificationService {
                await _upiChannel.invokeMethod('removeQueuedNotification', {'id': messageId});
                print("Removed synced notification $messageId from Native Queue.");
             }
-            
-            await Future.delayed(const Duration(seconds: 2));
+
+            // No artificial delay on the local fast path. Only throttle (briefly)
+            // when the AI fallback was actually used, to avoid hammering Gemini
+            // when several unparsable items are queued.
+            if (_lastCallUsedGemini) {
+              await Future.delayed(const Duration(milliseconds: 300));
+            }
           }
         }
       }
@@ -190,6 +203,9 @@ class NotificationService {
     final fallbackPayee = data['payee'] ?? 'Unknown Payment';
     final messageId = data['messageId'];
 
+    // Reset per call; set to true only if the Gemini fallback path runs.
+    _lastCallUsedGemini = false;
+
     double? parsedAmount;
     String parsedPayee = fallbackPayee;
     String parsedType = 'Expense';
@@ -206,6 +222,15 @@ class NotificationService {
         ? DateTime.fromMillisecondsSinceEpoch(postedAtMs)
         : DateTime.now();
 
+    // Debug: surface the lag between when the notification was posted (native)
+    // and when we actually process it — helps diagnose sync delays/missed items.
+    if (postedAtMs != null) {
+      final lagMs = DateTime.now().millisecondsSinceEpoch - postedAtMs;
+      print("Sync lag: ${lagMs}ms (postedAt=${txTimestamp.toIso8601String()}, msgId=$messageId)");
+    } else {
+      print("Notification missing postedAt; using now() (msgId=$messageId)");
+    }
+
     // === Local-first parsing (privacy + cost) ===
     // Parse on-device with regex first; the common case never touches AI.
     final local = _parseLocally(data);
@@ -221,6 +246,8 @@ class NotificationService {
     if (parsedAmount == null) {
       final geminiKey = _resolveGeminiKey(settings);
       if (geminiKey != null && geminiKey.isNotEmpty) {
+        // Mark the AI path as used so the queue loop applies its brief throttle.
+        _lastCallUsedGemini = true;
         try {
         final accounts = await _accountRepo.watchAccounts().first;
         final categories = await _categoryRepo.watchCategories().first;

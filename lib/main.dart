@@ -8,6 +8,7 @@ import 'package:cashi_flow/domain/models/account_model.dart';
 import 'package:cashi_flow/domain/models/category_model.dart';
 import 'package:cashi_flow/domain/models/user_settings_model.dart';
 import 'package:dynamic_color/dynamic_color.dart';
+import 'package:cashi_flow/data/services/notification_service.dart';
 import 'package:cashi_flow/presentation/core/router.dart';
 import 'package:cashi_flow/presentation/core/theme.dart';
 
@@ -67,12 +68,22 @@ class CashiFlowApp extends ConsumerStatefulWidget {
   ConsumerState<CashiFlowApp> createState() => _CashiFlowAppState();
 }
 
-class _CashiFlowAppState extends ConsumerState<CashiFlowApp> {
+class _CashiFlowAppState extends ConsumerState<CashiFlowApp>
+    with WidgetsBindingObserver {
   final QuickActions quickActions = const QuickActions();
 
   @override
   void initState() {
     super.initState();
+
+    // Observe app lifecycle so we can drain the offline queue on every resume.
+    WidgetsBinding.instance.addObserver(this);
+
+    // Initialize the notification service at app root (creating the provider
+    // starts listening) and drain any queued notifications once on startup —
+    // independent of which screen mounts first.
+    ref.read(notificationServiceProvider).syncOfflineQueue();
+
     quickActions.initialize((String shortcutType) {
       if (shortcutType == 'action_scan') {
         ref.read(routerProvider).push('/scan');
@@ -89,7 +100,26 @@ class _CashiFlowAppState extends ConsumerState<CashiFlowApp> {
   }
 
   @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Reliably drain the native offline queue whenever the app returns to the
+    // foreground — fixes delayed/missed transactions that previously only synced
+    // when the Dashboard happened to mount the provider.
+    if (state == AppLifecycleState.resumed) {
+      ref.read(notificationServiceProvider).syncOfflineQueue();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Keep the notification service alive at the app root so listening + syncing
+    // run regardless of the active route.
+    ref.watch(notificationServiceProvider);
     final router = ref.watch(routerProvider);
     
     return DynamicColorBuilder(

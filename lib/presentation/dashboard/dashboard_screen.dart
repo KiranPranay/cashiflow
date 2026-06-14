@@ -7,7 +7,6 @@ import 'package:cashi_flow/domain/models/user_settings_model.dart';
 import 'package:cashi_flow/domain/providers/account_providers.dart';
 import 'package:cashi_flow/domain/providers/transaction_providers.dart';
 import 'package:cashi_flow/domain/providers/user_settings_providers.dart';
-import 'package:cashi_flow/data/services/notification_service.dart';
 import 'package:cashi_flow/presentation/shared/transaction_editor_dialog.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -20,8 +19,9 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
-    ref.watch(notificationServiceProvider);
-
+    // NOTE: notificationServiceProvider is now initialized at the app root
+    // (CashiFlowApp) so listening + queue draining start regardless of which
+    // screen opens first. No need to mount it lazily here.
     final accountsAsync = ref.watch(accountsStreamProvider);
     final transactionsAsync = ref.watch(transactionsStreamProvider);
     final settingsAsync = ref.watch(userSettingsStreamProvider);
